@@ -215,10 +215,12 @@
       }
 
       // Preserve original image proportions.
-      const scale = Math.min(
-        canvas.width / image.naturalWidth,
-        canvas.height / image.naturalHeight
-      );
+      
+const scale = Math.max(
+  canvas.width / image.naturalWidth,
+  canvas.height / image.naturalHeight
+);
+
 
       const width = image.naturalWidth * scale;
       const height = image.naturalHeight * scale;
