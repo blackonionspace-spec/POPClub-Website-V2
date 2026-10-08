@@ -1,14 +1,13 @@
 
 (() => {
   "use strict";
-  
+
   // Always start the homepage from the top on reload.
   if ("scrollRestoration" in history) {
     history.scrollRestoration = "manual";
   }
 
   window.scrollTo(0, 0);
-
 
   // =========================================
   // ANIMATION SETTINGS
@@ -20,7 +19,7 @@
     scrollDistance: "200%"
   };
 
-  // Frame numbers are zero-based array indices.
+  // Coin frame numbers are zero-based indices.
   // 1_3000 = index 0
   // 1_3119 = index 119
 
@@ -33,26 +32,42 @@
   const EXIT_START = 75;
   const EXIT_END = 119;
 
+  // Curtain sequence:
+  // index 0  = 1_202.avif
+  // index 26 = 1_228.avif
+  //
+  // Curtains begin when the coin reaches
+  // frame 1_3047 (coin index 47).
+
+  const CURTAIN_START_COIN_FRAME = 47;
+  const CURTAIN_LAST_FRAME = 26;
+
   function initCoinAnimation() {
     const wrapper = document.querySelector(".coin_wrapper");
-    const container = document.querySelector(".coin_coin");
-    const urls = window.coinFrameUrls;
+    const coinContainer = document.querySelector(".coin_coin");
+    const curtainContainer = document.querySelector(".coin_curtains");
+
+    const coinUrls = window.coinFrameUrls;
+    const curtainUrls = window.curtainFrameUrls;
 
     if (
       !wrapper ||
-      !container ||
-      !Array.isArray(urls) ||
-      urls.length !== 120
+      !coinContainer ||
+      !curtainContainer ||
+      !Array.isArray(coinUrls) ||
+      coinUrls.length !== 120 ||
+      !Array.isArray(curtainUrls) ||
+      curtainUrls.length !== 27
     ) {
       console.error(
-        "Coin animation: Missing elements or frame URLs."
+        "Coin/curtain animation: Missing elements or frame URLs."
       );
       return;
     }
 
     if (!window.gsap || !window.ScrollTrigger) {
       console.error(
-        "Coin animation: GSAP or ScrollTrigger missing."
+        "Coin/curtain animation: GSAP or ScrollTrigger missing."
       );
       return;
     }
@@ -63,21 +78,34 @@
     // CANVAS SETUP
     // =========================================
 
-    const canvas = document.createElement("canvas");
-    const ctx = canvas.getContext("2d", {
-      alpha: true
-    });
+    function createCanvas(container) {
+      const canvas = document.createElement("canvas");
 
-    if (!ctx) return;
+      canvas.style.cssText =
+        "display:block;width:100%;height:100%;pointer-events:none;";
 
-    canvas.style.cssText =
-      "display:block;width:100%;height:100%;pointer-events:none;";
+      const ctx = canvas.getContext("2d", {
+        alpha: true
+      });
 
-    container.replaceChildren(canvas);
+      if (!ctx) return null;
 
-    const images = new Array(urls.length);
+      container.replaceChildren(canvas);
 
-    let currentFrame = SPIN_START;
+      return { canvas, ctx, container };
+    }
+
+    const coinLayer = createCanvas(coinContainer);
+    const curtainLayer = createCanvas(curtainContainer);
+
+    if (!coinLayer || !curtainLayer) return;
+
+    const coinImages = new Array(coinUrls.length);
+    const curtainImages = new Array(curtainUrls.length);
+
+    let currentCoinFrame = SPIN_START;
+    let currentCurtainFrame = -1;
+
     let introFinished = false;
     let scrollProgress = 0;
 
@@ -86,7 +114,6 @@
     // =========================================
 
     let scrollLocked = false;
-    let savedScrollY = 0;
 
     const blockedKeys = new Set([
       "ArrowUp",
@@ -114,7 +141,6 @@
     function lockScroll() {
       if (scrollLocked) return;
 
-      savedScrollY = window.scrollY;
       scrollLocked = true;
 
       document.addEventListener(
@@ -135,8 +161,6 @@
         { passive: false }
       );
 
-      // Prevent scrollbar dragging and
-      // other native page scrolling.
       document.documentElement.style.overflow = "hidden";
       document.body.style.overflow = "hidden";
     }
@@ -172,8 +196,15 @@
     // CANVAS RENDERING
     // =========================================
 
-    function draw() {
-      const image = images[currentFrame];
+    function drawImageContained(layer, image) {
+      const { canvas, ctx } = layer;
+
+      ctx.clearRect(
+        0,
+        0,
+        canvas.width,
+        canvas.height
+      );
 
       if (
         !image ||
@@ -183,14 +214,7 @@
         return;
       }
 
-      ctx.clearRect(
-        0,
-        0,
-        canvas.width,
-        canvas.height
-      );
-
-      // Preserve original 16:9 proportions.
+      // Preserve original image proportions.
       const scale = Math.min(
         canvas.width / image.naturalWidth,
         canvas.height / image.naturalHeight
@@ -208,37 +232,104 @@
       );
     }
 
-    function showFrame(index) {
-      currentFrame = Math.max(
+    function drawCoin() {
+      drawImageContained(
+        coinLayer,
+        coinImages[currentCoinFrame]
+      );
+    }
+
+    function drawCurtain() {
+      if (currentCurtainFrame < 0) {
+        curtainLayer.ctx.clearRect(
+          0,
+          0,
+          curtainLayer.canvas.width,
+          curtainLayer.canvas.height
+        );
+        return;
+      }
+
+      drawImageContained(
+        curtainLayer,
+        curtainImages[currentCurtainFrame]
+      );
+    }
+
+    function showCoinFrame(index) {
+      currentCoinFrame = Math.max(
         0,
         Math.min(
-          urls.length - 1,
+          coinUrls.length - 1,
           Math.round(index)
         )
       );
 
-      draw();
+      drawCoin();
     }
 
-    function resize() {
-      const rect = container.getBoundingClientRect();
+    function showCurtainFrame(index) {
+      if (index < 0) {
+        currentCurtainFrame = -1;
+      } else {
+        currentCurtainFrame = Math.max(
+          0,
+          Math.min(
+            CURTAIN_LAST_FRAME,
+            Math.round(index)
+          )
+        );
+      }
+
+      drawCurtain();
+    }
+
+    // Synchronize curtains to the coin's
+    // current frame during the automatic drop.
+    function updateCurtainFromCoin(coinFrame) {
+      const roundedCoinFrame = Math.round(coinFrame);
+
+      if (roundedCoinFrame < CURTAIN_START_COIN_FRAME) {
+        showCurtainFrame(-1);
+        return;
+      }
+
+      const curtainFrame =
+        roundedCoinFrame - CURTAIN_START_COIN_FRAME;
+
+      showCurtainFrame(
+        Math.min(curtainFrame, CURTAIN_LAST_FRAME)
+      );
+    }
+
+    // =========================================
+    // RESIZING
+    // =========================================
+
+    function resizeLayer(layer, drawFunction) {
+      const rect = layer.container.getBoundingClientRect();
 
       const dpr = Math.min(
         window.devicePixelRatio || 1,
         2
       );
 
-      canvas.width = Math.max(
+      layer.canvas.width = Math.max(
         1,
         Math.round(rect.width * dpr)
       );
 
-      canvas.height = Math.max(
+      layer.canvas.height = Math.max(
         1,
         Math.round(rect.height * dpr)
       );
 
-      draw();
+      drawFunction();
+    }
+
+    function resize() {
+      resizeLayer(coinLayer, drawCoin);
+      resizeLayer(curtainLayer, drawCurtain);
     }
 
     resize();
@@ -252,31 +343,49 @@
     // FRAME PRELOADING
     // =========================================
 
-    const preloadPromises = urls.map(
-      (url, index) => {
+    function preloadFrames(urls, images, label, onLoad) {
+      return urls.map((url, index) => {
         return new Promise((resolve) => {
           const image = new Image();
 
           images[index] = image;
 
           image.onload = () => {
-            if (index === currentFrame) {
-              draw();
-            }
-
+            if (onLoad) onLoad(index);
             resolve(true);
           };
 
           image.onerror = () => {
             console.warn(
-              `Coin frame ${index} failed to load.`
+              `${label} frame ${index} failed to load.`
             );
-
             resolve(false);
           };
 
           image.src = url;
         });
+      });
+    }
+
+    const coinPreloads = preloadFrames(
+      coinUrls,
+      coinImages,
+      "Coin",
+      (index) => {
+        if (index === currentCoinFrame) {
+          drawCoin();
+        }
+      }
+    );
+
+    const curtainPreloads = preloadFrames(
+      curtainUrls,
+      curtainImages,
+      "Curtain",
+      (index) => {
+        if (index === currentCurtainFrame) {
+          drawCurtain();
+        }
       }
     );
 
@@ -302,7 +411,9 @@
           scrollProgress *
           (EXIT_END - EXIT_START);
 
-        showFrame(frame);
+        showCoinFrame(frame);
+
+        // Curtains remain on their final frame.
       }
     });
 
@@ -310,8 +421,12 @@
     // AUTOMATIC INTRO
     // =========================================
 
-    Promise.all(preloadPromises).then(() => {
-      showFrame(SPIN_START);
+    Promise.all([
+      ...coinPreloads,
+      ...curtainPreloads
+    ]).then(() => {
+      showCoinFrame(SPIN_START);
+      showCurtainFrame(-1);
 
       const frameState = {
         value: SPIN_START
@@ -319,27 +434,24 @@
 
       const timeline = gsap.timeline({
         onComplete() {
-
           // Automatic animation is finished.
           introFinished = true;
 
-          // Ensure the exit starts at floor level.
-          
-scrollProgress = 0;
-showFrame(EXIT_START);
+          // Coin begins scroll exit at floor level.
+          scrollProgress = 0;
+          showCoinFrame(EXIT_START);
 
-// Ensure the coin section starts at the beginning.
-window.scrollTo(0, 0);
+          // Keep curtains on final frame.
+          showCurtainFrame(CURTAIN_LAST_FRAME);
 
-// Restore normal page scrolling.
-unlockScroll();
+          // Reset scroll before unlocking.
+          window.scrollTo(0, 0);
 
+          unlockScroll();
 
-          // Recalculate ScrollTrigger after
-          // restoring page overflow.
+          // Recalculate after restoring overflow.
           ScrollTrigger.refresh();
 
-          // Match the actual scroll position.
           scrollProgress = scrollTrigger.progress;
 
           const frame =
@@ -347,10 +459,10 @@ unlockScroll();
             scrollProgress *
             (EXIT_END - EXIT_START);
 
-          showFrame(frame);
+          showCoinFrame(frame);
 
           console.log(
-            "Coin intro complete. Scroll exit active."
+            "Coin and curtain intro complete. Scroll exit active."
           );
         }
       });
@@ -379,7 +491,7 @@ unlockScroll();
             ease: "none",
 
             onUpdate: () => {
-              showFrame(frameState.value);
+              showCoinFrame(frameState.value);
             }
           }
         );
@@ -404,7 +516,10 @@ unlockScroll();
           ease: "none",
 
           onUpdate: () => {
-            showFrame(frameState.value);
+            showCoinFrame(frameState.value);
+
+            // Curtains follow the same timeline.
+            updateCurtainFromCoin(frameState.value);
           }
         }
       );
