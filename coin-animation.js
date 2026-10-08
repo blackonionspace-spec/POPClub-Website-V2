@@ -1,6 +1,14 @@
 
 (() => {
   "use strict";
+  
+  // Always start the homepage from the top on reload.
+  if ("scrollRestoration" in history) {
+    history.scrollRestoration = "manual";
+  }
+
+  window.scrollTo(0, 0);
+
 
   // =========================================
   // ANIMATION SETTINGS
@@ -316,11 +324,16 @@
           introFinished = true;
 
           // Ensure the exit starts at floor level.
-          scrollProgress = 0;
-          showFrame(EXIT_START);
+          
+scrollProgress = 0;
+showFrame(EXIT_START);
 
-          // Restore normal page scrolling.
-          unlockScroll();
+// Ensure the coin section starts at the beginning.
+window.scrollTo(0, 0);
+
+// Restore normal page scrolling.
+unlockScroll();
+
 
           // Recalculate ScrollTrigger after
           // restoring page overflow.
