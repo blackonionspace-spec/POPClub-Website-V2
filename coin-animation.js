@@ -16,13 +16,12 @@
   const CONFIG = {
     spinCount: 2,
     fps: 30,
-    scrollDistance: "200%"
+    scrollDistance: "200%",
+    curtainBreathingDuration: 7,
+    curtainBreathingBrightness: 1.12
   };
 
-  // Coin frame numbers are zero-based indices.
-  // 1_3000 = index 0
-  // 1_3119 = index 119
-
+  // Coin sequence: 1_3000.avif through 1_3119.avif
   const SPIN_START = 0;
   const SPIN_END = 44;
 
@@ -32,15 +31,9 @@
   const EXIT_START = 75;
   const EXIT_END = 119;
 
-  // Curtain sequence:
-  // index 0  = 1_202.avif
-  // index 26 = 1_228.avif
-  //
-  // Curtains begin when the coin reaches
-  // frame 1_3047 (coin index 47).
-
-  const CURTAIN_START_COIN_FRAME = 47;
-  const CURTAIN_LAST_FRAME = 26;
+  // Curtain sequence: 1_200.avif through 1_239.avif
+  const CURTAIN_FRAME_COUNT = 40;
+  const CURTAIN_LAST_FRAME = 39;
 
   function initCoinAnimation() {
     const wrapper = document.querySelector(".coin_wrapper");
@@ -57,10 +50,10 @@
       !Array.isArray(coinUrls) ||
       coinUrls.length !== 120 ||
       !Array.isArray(curtainUrls) ||
-      curtainUrls.length !== 27
+      curtainUrls.length !== CURTAIN_FRAME_COUNT
     ) {
       console.error(
-        "Coin/curtain animation: Missing elements or frame URLs."
+        "Coin/curtain animation: Missing elements or incorrect frame URL count."
       );
       return;
     }
@@ -108,6 +101,38 @@
 
     let introFinished = false;
     let scrollProgress = 0;
+
+    // =========================================
+    // CURTAIN BRIGHTNESS BREATHING
+    // =========================================
+
+    // Override any earlier always-on CSS breathing animation.
+    curtainLayer.canvas.style.animation = "none";
+    curtainLayer.canvas.style.filter = "brightness(1)";
+
+    let curtainBreathingStarted = false;
+
+    function startCurtainBreathing() {
+      if (curtainBreathingStarted) return;
+
+      curtainBreathingStarted = true;
+
+      // Start at normal brightness and animate only
+      // after the final curtain frame is displayed.
+      gsap.fromTo(
+        curtainLayer.canvas,
+        {
+          filter: "brightness(1)"
+        },
+        {
+          filter: `brightness(${CONFIG.curtainBreathingBrightness})`,
+          duration: CONFIG.curtainBreathingDuration / 2,
+          ease: "sine.inOut",
+          repeat: -1,
+          yoyo: true
+        }
+      );
+    }
 
     // =========================================
     // SCROLL LOCK
@@ -189,14 +214,13 @@
       document.body.style.overflow = "";
     }
 
-    // Lock immediately, before image loading.
     lockScroll();
 
     // =========================================
     // CANVAS RENDERING
     // =========================================
 
-    function drawImageContained(layer, image) {
+    function drawImageCover(layer, image) {
       const { canvas, ctx } = layer;
 
       ctx.clearRect(
@@ -214,13 +238,12 @@
         return;
       }
 
-      // Preserve original image proportions.
-      
-const scale = Math.max(
-  canvas.width / image.naturalWidth,
-  canvas.height / image.naturalHeight
-);
-
+      // Cover the viewport while preserving
+      // the original image aspect ratio.
+      const scale = Math.max(
+        canvas.width / image.naturalWidth,
+        canvas.height / image.naturalHeight
+      );
 
       const width = image.naturalWidth * scale;
       const height = image.naturalHeight * scale;
@@ -235,7 +258,7 @@ const scale = Math.max(
     }
 
     function drawCoin() {
-      drawImageContained(
+      drawImageCover(
         coinLayer,
         coinImages[currentCoinFrame]
       );
@@ -252,7 +275,7 @@ const scale = Math.max(
         return;
       }
 
-      drawImageContained(
+      drawImageCover(
         curtainLayer,
         curtainImages[currentCurtainFrame]
       );
@@ -278,30 +301,12 @@ const scale = Math.max(
           0,
           Math.min(
             CURTAIN_LAST_FRAME,
-            Math.round(index)
+            Math.floor(index)
           )
         );
       }
 
       drawCurtain();
-    }
-
-    // Synchronize curtains to the coin's
-    // current frame during the automatic drop.
-    function updateCurtainFromCoin(coinFrame) {
-      const roundedCoinFrame = Math.round(coinFrame);
-
-      if (roundedCoinFrame < CURTAIN_START_COIN_FRAME) {
-        showCurtainFrame(-1);
-        return;
-      }
-
-      const curtainFrame =
-        roundedCoinFrame - CURTAIN_START_COIN_FRAME;
-
-      showCurtainFrame(
-        Math.min(curtainFrame, CURTAIN_LAST_FRAME)
-      );
     }
 
     // =========================================
@@ -415,7 +420,8 @@ const scale = Math.max(
 
         showCoinFrame(frame);
 
-        // Curtains remain on their final frame.
+        // Curtains remain on their final frame,
+        // with brightness breathing continuing.
       }
     });
 
@@ -434,24 +440,28 @@ const scale = Math.max(
         value: SPIN_START
       };
 
+      const curtainState = {
+        value: 0
+      };
+
       const timeline = gsap.timeline({
         onComplete() {
-          // Automatic animation is finished.
           introFinished = true;
 
-          // Coin begins scroll exit at floor level.
           scrollProgress = 0;
           showCoinFrame(EXIT_START);
 
-          // Keep curtains on final frame.
+          // Keep the last curtain frame visible.
           showCurtainFrame(CURTAIN_LAST_FRAME);
 
-          // Reset scroll before unlocking.
+          // Safety check: breathing begins only
+          // once the curtain sequence has finished.
+          startCurtainBreathing();
+
           window.scrollTo(0, 0);
 
           unlockScroll();
 
-          // Recalculate after restoring overflow.
           ScrollTrigger.refresh();
 
           scrollProgress = scrollTrigger.progress;
@@ -470,7 +480,7 @@ const scale = Math.max(
       });
 
       // =====================================
-      // PART 1 — AUTOMATIC SPINS
+      // PART 1 — AUTOMATIC COIN SPINS
       // =====================================
 
       for (
@@ -500,8 +510,17 @@ const scale = Math.max(
       }
 
       // =====================================
-      // PART 2 — AUTOMATIC DROP
+      // PART 2 — AUTOMATIC COIN DROP
       // =====================================
+
+      const dropDuration =
+        (DROP_END - DROP_START + 1) /
+        CONFIG.fps;
+
+      const dropStartTime =
+        CONFIG.spinCount *
+        (SPIN_END - SPIN_START + 1) /
+        CONFIG.fps;
 
       timeline.fromTo(
         frameState,
@@ -510,32 +529,73 @@ const scale = Math.max(
         },
         {
           value: DROP_END,
-
-          duration:
-            (DROP_END - DROP_START + 1) /
-            CONFIG.fps,
-
+          duration: dropDuration,
           ease: "none",
 
           onUpdate: () => {
             showCoinFrame(frameState.value);
-
-            // Curtains follow the same timeline.
-            updateCurtainFromCoin(frameState.value);
           }
         }
       );
 
-      // Fade in heading during the coin drop (3s–4s).
+      // =====================================
+      // PART 3 — 40-FRAME CURTAIN REVEAL
+      // =====================================
+
+      // The curtain reveal begins at the exact
+      // same time as the coin drop.
+      //
+      // 40 frames are distributed over one second,
+      // independently of the coin's 30 FPS frames.
+
+      timeline.fromTo(
+        curtainState,
+        {
+          value: 0
+        },
+        {
+          value: CURTAIN_FRAME_COUNT,
+          duration: dropDuration,
+          ease: "none",
+
+          onUpdate: () => {
+            showCurtainFrame(
+              Math.min(
+                CURTAIN_LAST_FRAME,
+                curtainState.value
+              )
+            );
+          },
+
+          onComplete: () => {
+            // Display the final curtain frame first.
+            showCurtainFrame(CURTAIN_LAST_FRAME);
+
+            // Only now begin brightness breathing.
+            startCurtainBreathing();
+          }
+        },
+        dropStartTime
+      );
+
+      // =====================================
+      // PART 4 — HEADING FADE-IN
+      // =====================================
+
+      // Fade begins when the coin drops,
+      // at exactly 3 seconds into the intro.
+
       timeline.fromTo(
         ".coin_heading",
-        { opacity: 0 },
+        {
+          opacity: 0
+        },
         {
           opacity: 1,
-          duration: 1,
+          duration: dropDuration,
           ease: "power2.inOut"
         },
-        3
+        dropStartTime
       );
 
       console.log(
@@ -556,5 +616,4 @@ const scale = Math.max(
   } else {
     initCoinAnimation();
   }
-
 })();
