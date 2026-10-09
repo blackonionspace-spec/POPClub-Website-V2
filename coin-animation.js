@@ -526,6 +526,18 @@ const scale = Math.max(
         }
       );
 
+      // Fade in heading during the coin drop (3s–4s).
+      timeline.fromTo(
+        ".coin_heading",
+        { opacity: 0 },
+        {
+          opacity: 1,
+          duration: 1,
+          ease: "power2.inOut"
+        },
+        3
+      );
+
       console.log(
         `Coin intro started: ${CONFIG.spinCount} spins at ${CONFIG.fps} FPS`
       );
