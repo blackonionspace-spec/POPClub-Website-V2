@@ -401,12 +401,12 @@
     // =========================================
 
     const scrollTrigger = ScrollTrigger.create({
-      trigger: wrapper,
-      start: "top top",
-      end: `+=${CONFIG.scrollDistance}`,
-      pin: true,
-      anticipatePin: 1,
-      invalidateOnRefresh: true,
+  trigger: document.querySelector(".section_coin"),
+  start: "top top",
+  end: `+=${CONFIG.scrollDistance}`,
+  pin: true,
+  anticipatePin: 1,
+  invalidateOnRefresh: true,
 
       onUpdate(self) {
         if (!introFinished) return;
