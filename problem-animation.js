@@ -5,13 +5,18 @@
 
    Uses the existing CRT ScrollTrigger.
    Does NOT create another pin.
+
+   CRT screen:
+   Hidden during frames 0–29.
+   Visible from frame 30 onward.
    ========================================= */
 
 (function () {
   "use strict";
 
   const CONFIG = {
-    frameProgressEnd: 0.40,
+    frameProgressEnd: 0.30,
+    crtRevealFrame: 30,
     maxDPR: 2
   };
 
@@ -20,10 +25,11 @@
     const wrapper = document.querySelector(".problem_wrapper");
     const layer = document.querySelector(".problem_frame_layer");
     const roll = document.querySelector(".crt-roll");
+    const crtScreen = document.querySelector(".problem_crt_screen");
 
     const urls = window.problemFrameURLs;
 
-    if (!section || !wrapper || !layer || !roll) {
+    if (!section || !wrapper || !layer || !roll || !crtScreen) {
       console.warn(
         "[Problem Animation] Required elements not found."
       );
@@ -49,11 +55,11 @@
        FIND EXISTING CRT SCROLLTRIGGER
        ----------------------------------------- */
 
-   const crtTrigger = ScrollTrigger.getAll().find(
-  (trigger) =>
-    trigger.trigger === section &&
-    trigger.vars.pin === true
-);
+    const crtTrigger = ScrollTrigger.getAll().find(
+      (trigger) =>
+        trigger.trigger === section &&
+        trigger.vars.pin === true
+    );
 
     if (!crtTrigger) {
       console.error(
@@ -79,6 +85,29 @@
       pointerEvents: "none",
       overflow: "hidden"
     });
+
+    /* -----------------------------------------
+       CRT VISIBILITY CONTROL
+       ----------------------------------------- */
+
+    // Hide the entire CRT screen initially.
+    // This includes its text, scanlines, grain,
+    // distortion and all other CRT effects.
+
+    crtScreen.style.visibility = "hidden";
+
+    function updateCRTVisibility(frameIndex) {
+      const shouldShow =
+        frameIndex >= CONFIG.crtRevealFrame;
+
+      const visibility = shouldShow
+        ? "visible"
+        : "hidden";
+
+      if (crtScreen.style.visibility !== visibility) {
+        crtScreen.style.visibility = visibility;
+      }
+    }
 
     /* -----------------------------------------
        CREATE CANVAS
@@ -215,7 +244,7 @@
       );
 
       // Complete all 55 frames within the
-      // first 40% of the CRT scroll distance.
+      // first 30% of the CRT scroll distance.
       // Then hold the final frame.
 
       const frameProgress = Math.min(
@@ -229,6 +258,12 @@
       );
 
       currentFrame = frameIndex;
+
+      // Reveal CRT at frame 30.
+      // Hide it again when scrolling backwards
+      // below frame 30.
+
+      updateCRTVisibility(currentFrame);
 
       if (currentFrame !== lastDrawnFrame) {
         drawFrame(currentFrame);
@@ -246,6 +281,10 @@
     // Follow the existing ScrollTrigger.
     // No new ScrollTrigger or pin is created.
     gsap.ticker.add(update);
+
+    // Apply the correct visibility immediately,
+    // including when the page loads mid-scroll.
+    update();
 
     console.log(
       "[Problem Animation] Initialized:",
