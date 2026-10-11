@@ -49,12 +49,11 @@
        FIND EXISTING CRT SCROLLTRIGGER
        ----------------------------------------- */
 
-    const crtTrigger = ScrollTrigger.getAll().find(
-      (trigger) =>
-        trigger.trigger === section &&
-        trigger.vars.pin === true &&
-        trigger.animation?.targets().includes(roll)
-    );
+   const crtTrigger = ScrollTrigger.getAll().find(
+  (trigger) =>
+    trigger.trigger === section &&
+    trigger.vars.pin === true
+);
 
     if (!crtTrigger) {
       console.error(
