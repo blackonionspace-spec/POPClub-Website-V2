@@ -16,7 +16,7 @@
   const CONFIG = {
     spinCount: 2,
     fps: 30,
-    scrollDistance: "400%",
+    scrollDistance: "200%",
     curtainBreathingDuration: 7,
     curtainBreathingBrightness: 1.12
   };
