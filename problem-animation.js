@@ -15,10 +15,10 @@
   "use strict";
 
   const CONFIG = {
-    frameProgressEnd: 0.30,
-    crtRevealFrame: 30,
-    maxDPR: 2
-  };
+  frameProgressEnd: 1500 / 11000,
+  crtRevealFrame: 30,
+  maxDPR: 2
+};
 
   function initProblemAnimation() {
     const section = document.querySelector(".section_problem");
