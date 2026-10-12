@@ -1,15 +1,14 @@
 
 /* =========================================
-   POPCLUB V2 — BELIEF FRAME ANIMATION
-
+   POPCLUB V2 — BELIEF ANIMATION
    170 AVIF frames: 2_3000–2_3169
 
-   Existing pinned section:
-   Problem + CRT:  5000px
-   Belief:        15000px
-   Total:         20000px
+   Problem + CRT: 5000px
+   Belief:       10500px
+   Total:        15500px
 
-   No additional ScrollTrigger or pin.
+   Reuses existing pinned ScrollTrigger.
+   No additional pin or ScrollTrigger.
    ========================================= */
 
 (function () {
@@ -17,22 +16,30 @@
 
   const CONFIG = {
     beliefStart: 5000,
-    beliefDistance: 15000,
-    totalDistance: 20000,
+    beliefDistance: 10500,
+    totalDistance: 15500,
     maxDPR: 2
   };
 
   const SEGMENTS = [
-    { type: "hold", frame: 0, distance: 1500 },
-    { type: "move", from: 0, to: 48, distance: 2100 },
-    { type: "hold", frame: 49, distance: 1200 },
-    { type: "move", from: 49, to: 88, distance: 2100 },
-    { type: "hold", frame: 89, distance: 1200 },
-    { type: "move", from: 89, to: 128, distance: 2100 },
-    { type: "hold", frame: 129, distance: 1200 },
-    { type: "move", from: 129, to: 169, distance: 2100 },
-    { type: "hold", frame: 169, distance: 1500 }
+    { type: "hold", frame: 0, distance: 500 },
+    { type: "move", from: 0, to: 49, distance: 1500 },
+    { type: "hold", frame: 49, distance: 1000 },
+    { type: "move", from: 49, to: 89, distance: 1500 },
+    { type: "hold", frame: 89, distance: 1000 },
+    { type: "move", from: 89, to: 129, distance: 1500 },
+    { type: "hold", frame: 129, distance: 1000 },
+    { type: "move", from: 129, to: 169, distance: 1500 },
+    { type: "hold", frame: 169, distance: 1000 }
   ];
+
+  function clamp(value, min, max) {
+    return Math.max(min, Math.min(max, value));
+  }
+
+  function lerp(a, b, t) {
+    return a + (b - a) * t;
+  }
 
   function initBeliefAnimation() {
     const section = document.querySelector(".section_problem");
@@ -41,7 +48,7 @@
     const urls = window.beliefFrameURLs;
 
     if (!section || !wrapper || !layer) {
-      console.warn("[Belief Animation] Required elements missing.");
+      console.error("[Belief Animation] Required elements missing.");
       return;
     }
 
@@ -66,14 +73,10 @@
 
     if (!crtTrigger) {
       console.error(
-        "[Belief Animation] CRT ScrollTrigger not found."
+        "[Belief Animation] Existing CRT trigger not found."
       );
       return;
     }
-
-    /* -----------------------------------------
-       PREPARE LAYER
-       ----------------------------------------- */
 
     if (getComputedStyle(wrapper).position === "static") {
       wrapper.style.position = "relative";
@@ -112,21 +115,47 @@
     layer.appendChild(canvas);
 
     /* -----------------------------------------
-       WHITE FLASH OVERLAY
+       FLASH LAYERS
+
+       Dark cover hides the baked-in title.
+       Radial bloom expands from screen centre.
+       Warm wash conceals the title at peak.
        ----------------------------------------- */
 
-    const flash = document.createElement("div");
+    function createOverlay(background, zIndex) {
+      const element = document.createElement("div");
 
-    Object.assign(flash.style, {
-      position: "absolute",
-      inset: "0",
-      background: "#ffffff",
-      opacity: "0",
-      pointerEvents: "none",
-      zIndex: "30"
-    });
+      Object.assign(element.style, {
+        position: "absolute",
+        inset: "0",
+        width: "100%",
+        height: "100%",
+        background,
+        opacity: "0",
+        pointerEvents: "none",
+        zIndex: String(zIndex),
+        willChange: "opacity, transform"
+      });
 
-    layer.appendChild(flash);
+      layer.appendChild(element);
+      return element;
+    }
+
+    const darkCover = createOverlay("#17120f", 30);
+
+    const radialBloom = createOverlay(
+      "radial-gradient(ellipse at 50% 50%, " +
+      "rgba(255,255,245,1) 0%, " +
+      "rgba(255,246,214,1) 18%, " +
+      "rgba(255,208,150,0.96) 38%, " +
+      "rgba(255,145,83,0.62) 58%, " +
+      "rgba(255,145,83,0) 85%)",
+      31
+    );
+
+    radialBloom.style.transformOrigin = "50% 50%";
+
+    const brightWash = createOverlay("#fff5df", 32);
 
     /* -----------------------------------------
        LOAD FRAMES
@@ -144,7 +173,7 @@
         frames[index] = img;
 
         if (index === currentFrame) {
-          drawFrame(currentFrame);
+          drawFrame(index);
         }
       };
 
@@ -160,7 +189,7 @@
     });
 
     /* -----------------------------------------
-       RESIZE
+       CANVAS SIZE AND DRAWING
        ----------------------------------------- */
 
     function resizeCanvas() {
@@ -182,10 +211,6 @@
       drawFrame(currentFrame);
     }
 
-    /* -----------------------------------------
-       DRAW FRAME
-       ----------------------------------------- */
-
     function drawFrame(index) {
       const img = frames[index];
 
@@ -201,8 +226,6 @@
       const width = canvas.width / dpr;
       const height = canvas.height / dpr;
 
-      ctx.clearRect(0, 0, width, height);
-
       const scale = Math.max(
         width / img.naturalWidth,
         height / img.naturalHeight
@@ -210,6 +233,8 @@
 
       const drawWidth = img.naturalWidth * scale;
       const drawHeight = img.naturalHeight * scale;
+
+      ctx.clearRect(0, 0, width, height);
 
       ctx.drawImage(
         img,
@@ -223,7 +248,7 @@
     }
 
     /* -----------------------------------------
-       SEGMENTED FRAME MAPPING
+       SEGMENTED FRAME PLAYBACK
        ----------------------------------------- */
 
     function getFrameAtDistance(distance) {
@@ -237,20 +262,14 @@
             return segment.frame;
           }
 
-          const t = Math.max(
+          const t = clamp(
+            (distance - cursor) / segment.distance,
             0,
-            Math.min(
-              1,
-              (distance - cursor) / segment.distance
-            )
+            1
           );
 
-          return Math.min(
-            segment.to,
-            Math.floor(
-              segment.from +
-              t * (segment.to - segment.from)
-            )
+          return Math.round(
+            lerp(segment.from, segment.to, t)
           );
         }
 
@@ -261,26 +280,50 @@
     }
 
     /* -----------------------------------------
-       WHITE FLASH MAPPING
+       CENTRE-ORIGINATING FLASH
+       First 350px of initial 500px hold.
+
+       0–110px: dark screen → expanding bloom
+       110–160px: bright wash reaches peak
+       160–350px: wash fades to reveal title
+       350–500px: clean Our Belief hold
        ----------------------------------------- */
 
-    function getFlashOpacity(distance) {
-      // White flash within the first 500px
-      // of the initial 1500px hold.
-
-      if (distance < 0 || distance > 500) {
-        return 0;
+    function updateFlash(distance) {
+      if (distance >= 350) {
+        darkCover.style.opacity = "0";
+        radialBloom.style.opacity = "0";
+        brightWash.style.opacity = "0";
+        return;
       }
 
-      if (distance < 100) {
-        return distance / 100;
-      }
+      if (distance < 110) {
+        const t = clamp(distance / 110, 0, 1);
 
-      if (distance < 200) {
-        return 1;
-      }
+        darkCover.style.opacity = "1";
+        radialBloom.style.opacity = String(t);
+        radialBloom.style.transform =
+          `scale(${lerp(0.2, 2.8, t)})`;
+        brightWash.style.opacity = "0";
 
-      return 1 - (distance - 200) / 300;
+      } else if (distance < 160) {
+        const t = clamp((distance - 110) / 50, 0, 1);
+
+        darkCover.style.opacity = "1";
+        radialBloom.style.opacity = "1";
+        radialBloom.style.transform = "scale(3)";
+        brightWash.style.opacity = String(t);
+
+      } else {
+        const t = clamp((distance - 160) / 190, 0, 1);
+
+        // The wash stays fully opaque while the
+        // dark cover disappears underneath it.
+        darkCover.style.opacity = "0";
+        radialBloom.style.opacity = String(1 - t);
+        radialBloom.style.transform = "scale(3)";
+        brightWash.style.opacity = String(1 - t);
+      }
     }
 
     /* -----------------------------------------
@@ -288,35 +331,33 @@
        ----------------------------------------- */
 
     function update() {
-      const progress = Math.max(
-        0,
-        Math.min(1, crtTrigger.progress)
-      );
+      const progress = clamp(crtTrigger.progress, 0, 1);
 
-      const scrollDistance =
+      const totalScroll =
         progress * CONFIG.totalDistance;
 
-      const beliefDistance =
-        scrollDistance - CONFIG.beliefStart;
+      const beliefScroll =
+        totalScroll - CONFIG.beliefStart;
 
-      const beliefActive = beliefDistance >= 0;
+      const beliefActive = beliefScroll >= 0;
 
-      layer.style.visibility = beliefActive
+      const visibility = beliefActive
         ? "visible"
         : "hidden";
 
+      if (layer.style.visibility !== visibility) {
+        layer.style.visibility = visibility;
+      }
+
       if (!beliefActive) {
         currentFrame = 0;
-        flash.style.opacity = "0";
         return;
       }
 
-      const distance = Math.max(
+      const distance = clamp(
+        beliefScroll,
         0,
-        Math.min(
-          CONFIG.beliefDistance,
-          beliefDistance
-        )
+        CONFIG.beliefDistance
       );
 
       currentFrame = getFrameAtDistance(distance);
@@ -325,8 +366,7 @@
         drawFrame(currentFrame);
       }
 
-      flash.style.opacity =
-        getFlashOpacity(distance).toFixed(3);
+      updateFlash(distance);
     }
 
     /* -----------------------------------------
@@ -344,7 +384,7 @@
     console.log(
       "[Belief Animation] Initialized:",
       urls.length,
-      "frames with holds and flash"
+      "frames, 10500px segmented timeline"
     );
   }
 
