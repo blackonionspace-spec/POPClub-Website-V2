@@ -2,22 +2,37 @@
 /* =========================================
    POPCLUB V2 — BELIEF FRAME ANIMATION
 
-   170 AVIF frames (2_3000–2_3169)
-   Uses the existing CRT ScrollTrigger.
-   Does NOT create another pin.
+   170 AVIF frames: 2_3000–2_3169
 
-   Problem + CRT: first 5000px
-   Belief sequence: next 6000px
-   Total pinned scroll: 11000px
+   Existing pinned section:
+   Problem + CRT:  5000px
+   Belief:        15000px
+   Total:         20000px
+
+   No additional ScrollTrigger or pin.
    ========================================= */
 
 (function () {
   "use strict";
 
   const CONFIG = {
-    beliefStartProgress: 5000 / 11000,
+    beliefStart: 5000,
+    beliefDistance: 15000,
+    totalDistance: 20000,
     maxDPR: 2
   };
+
+  const SEGMENTS = [
+    { type: "hold", frame: 0, distance: 1500 },
+    { type: "move", from: 0, to: 48, distance: 2100 },
+    { type: "hold", frame: 49, distance: 1200 },
+    { type: "move", from: 49, to: 88, distance: 2100 },
+    { type: "hold", frame: 89, distance: 1200 },
+    { type: "move", from: 89, to: 128, distance: 2100 },
+    { type: "hold", frame: 129, distance: 1200 },
+    { type: "move", from: 129, to: 169, distance: 2100 },
+    { type: "hold", frame: 169, distance: 1500 }
+  ];
 
   function initBeliefAnimation() {
     const section = document.querySelector(".section_problem");
@@ -26,46 +41,38 @@
     const urls = window.beliefFrameURLs;
 
     if (!section || !wrapper || !layer) {
-      console.warn(
-        "[Belief Animation] Required elements not found."
-      );
+      console.warn("[Belief Animation] Required elements missing.");
       return;
     }
 
     if (!Array.isArray(urls) || urls.length !== 170) {
       console.error(
-        "[Belief Animation] Expected 170 frame URLs.",
+        "[Belief Animation] Expected 170 URLs.",
         urls?.length
       );
       return;
     }
 
     if (!window.gsap || !window.ScrollTrigger) {
-      console.error(
-        "[Belief Animation] GSAP or ScrollTrigger missing."
-      );
+      console.error("[Belief Animation] GSAP missing.");
       return;
     }
 
-    /* -----------------------------------------
-       FIND EXISTING CRT SCROLLTRIGGER
-       ----------------------------------------- */
-
     const crtTrigger = ScrollTrigger.getAll().find(
-      (trigger) =>
+      trigger =>
         trigger.trigger === section &&
         trigger.vars.pin === true
     );
 
     if (!crtTrigger) {
       console.error(
-        "[Belief Animation] Existing CRT ScrollTrigger not found."
+        "[Belief Animation] CRT ScrollTrigger not found."
       );
       return;
     }
 
     /* -----------------------------------------
-       PREPARE BELIEF LAYER
+       PREPARE LAYER
        ----------------------------------------- */
 
     if (getComputedStyle(wrapper).position === "static") {
@@ -84,18 +91,14 @@
     });
 
     /* -----------------------------------------
-       CREATE CANVAS
+       CANVAS
        ----------------------------------------- */
 
     const canvas = document.createElement("canvas");
-    const ctx = canvas.getContext("2d", {
-      alpha: true
-    });
+    const ctx = canvas.getContext("2d", { alpha: true });
 
     if (!ctx) {
-      console.error(
-        "[Belief Animation] Canvas context unavailable."
-      );
+      console.error("[Belief Animation] Canvas unavailable.");
       return;
     }
 
@@ -109,10 +112,28 @@
     layer.appendChild(canvas);
 
     /* -----------------------------------------
-       LOAD ALL 170 FRAMES
+       WHITE FLASH OVERLAY
+       ----------------------------------------- */
+
+    const flash = document.createElement("div");
+
+    Object.assign(flash.style, {
+      position: "absolute",
+      inset: "0",
+      background: "#ffffff",
+      opacity: "0",
+      pointerEvents: "none",
+      zIndex: "30"
+    });
+
+    layer.appendChild(flash);
+
+    /* -----------------------------------------
+       LOAD FRAMES
        ----------------------------------------- */
 
     const frames = new Array(urls.length);
+
     let currentFrame = 0;
     let lastDrawnFrame = -1;
 
@@ -129,7 +150,7 @@
 
       img.onerror = function () {
         console.warn(
-          "[Belief Animation] Failed to load frame:",
+          "[Belief Animation] Failed frame:",
           index,
           url
         );
@@ -139,7 +160,7 @@
     });
 
     /* -----------------------------------------
-       RESIZE CANVAS
+       RESIZE
        ----------------------------------------- */
 
     function resizeCanvas() {
@@ -162,7 +183,7 @@
     }
 
     /* -----------------------------------------
-       DRAW FRAME — PRESERVE TRANSPARENCY
+       DRAW FRAME
        ----------------------------------------- */
 
     function drawFrame(index) {
@@ -190,13 +211,10 @@
       const drawWidth = img.naturalWidth * scale;
       const drawHeight = img.naturalHeight * scale;
 
-      const x = (width - drawWidth) / 2;
-      const y = (height - drawHeight) / 2;
-
       ctx.drawImage(
         img,
-        x,
-        y,
+        (width - drawWidth) / 2,
+        (height - drawHeight) / 2,
         drawWidth,
         drawHeight
       );
@@ -205,7 +223,68 @@
     }
 
     /* -----------------------------------------
-       FOLLOW EXISTING CRT SCROLLTRIGGER
+       SEGMENTED FRAME MAPPING
+       ----------------------------------------- */
+
+    function getFrameAtDistance(distance) {
+      let cursor = 0;
+
+      for (const segment of SEGMENTS) {
+        const end = cursor + segment.distance;
+
+        if (distance < end) {
+          if (segment.type === "hold") {
+            return segment.frame;
+          }
+
+          const t = Math.max(
+            0,
+            Math.min(
+              1,
+              (distance - cursor) / segment.distance
+            )
+          );
+
+          return Math.min(
+            segment.to,
+            Math.floor(
+              segment.from +
+              t * (segment.to - segment.from)
+            )
+          );
+        }
+
+        cursor = end;
+      }
+
+      return 169;
+    }
+
+    /* -----------------------------------------
+       WHITE FLASH MAPPING
+       ----------------------------------------- */
+
+    function getFlashOpacity(distance) {
+      // White flash within the first 500px
+      // of the initial 1500px hold.
+
+      if (distance < 0 || distance > 500) {
+        return 0;
+      }
+
+      if (distance < 100) {
+        return distance / 100;
+      }
+
+      if (distance < 200) {
+        return 1;
+      }
+
+      return 1 - (distance - 200) / 300;
+    }
+
+    /* -----------------------------------------
+       FOLLOW EXISTING SCROLLTRIGGER
        ----------------------------------------- */
 
     function update() {
@@ -214,43 +293,40 @@
         Math.min(1, crtTrigger.progress)
       );
 
-      const beliefActive =
-        progress >= CONFIG.beliefStartProgress;
+      const scrollDistance =
+        progress * CONFIG.totalDistance;
 
-      const visibility = beliefActive
+      const beliefDistance =
+        scrollDistance - CONFIG.beliefStart;
+
+      const beliefActive = beliefDistance >= 0;
+
+      layer.style.visibility = beliefActive
         ? "visible"
         : "hidden";
 
-      if (layer.style.visibility !== visibility) {
-        layer.style.visibility = visibility;
-      }
-
       if (!beliefActive) {
         currentFrame = 0;
+        flash.style.opacity = "0";
         return;
       }
 
-      const frameProgress = Math.max(
+      const distance = Math.max(
         0,
         Math.min(
-          1,
-          (progress - CONFIG.beliefStartProgress) /
-            (1 - CONFIG.beliefStartProgress)
+          CONFIG.beliefDistance,
+          beliefDistance
         )
       );
 
-      const frameIndex = Math.min(
-        urls.length - 1,
-        Math.floor(
-          frameProgress * (urls.length - 1)
-        )
-      );
-
-      currentFrame = frameIndex;
+      currentFrame = getFrameAtDistance(distance);
 
       if (currentFrame !== lastDrawnFrame) {
         drawFrame(currentFrame);
       }
+
+      flash.style.opacity =
+        getFlashOpacity(distance).toFixed(3);
     }
 
     /* -----------------------------------------
@@ -261,8 +337,6 @@
 
     window.addEventListener("resize", resizeCanvas);
 
-    // Follow the existing pinned CRT timeline.
-    // No additional ScrollTrigger is created.
     gsap.ticker.add(update);
 
     update();
@@ -270,7 +344,7 @@
     console.log(
       "[Belief Animation] Initialized:",
       urls.length,
-      "frames"
+      "frames with holds and flash"
     );
   }
 
