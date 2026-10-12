@@ -1,4 +1,4 @@
-﻿const beliefFrameURLs = [
+﻿window.beliefFrameURLs = [
   "https://s3.amazonaws.com/webflow-prod-assets/6ac4f76204430eb900a80285/6acb830cfae7d56f2379b9fb_2_3000.avif",
   "https://s3.amazonaws.com/webflow-prod-assets/6ac4f76204430eb900a80285/6acb831531ce4c749ad8c55c_2_3001.avif",
   "https://s3.amazonaws.com/webflow-prod-assets/6ac4f76204430eb900a80285/6acb83159823c2e728273fab_2_3002.avif",
