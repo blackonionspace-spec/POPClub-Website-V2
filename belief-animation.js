@@ -350,9 +350,10 @@
       }
 
       if (!beliefActive) {
-        currentFrame = 0;
-        return;
-      }
+  currentFrame = 0;
+  window.beliefCurrentFrame = -1;
+  return;
+}
 
       const distance = clamp(
         beliefScroll,
@@ -361,6 +362,7 @@
       );
 
       currentFrame = getFrameAtDistance(distance);
+      window.beliefCurrentFrame = currentFrame;
 
       if (currentFrame !== lastDrawnFrame) {
         drawFrame(currentFrame);
