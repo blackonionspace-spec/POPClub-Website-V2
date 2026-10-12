@@ -425,29 +425,6 @@
       }
     });
 
-    /* -----------------------------------------
-   COIN → PROBLEM TRANSITION SPACING
-   ----------------------------------------- */
-
-const TRANSITION_OVERLAP_VH = 20;
-
-function adjustCoinTransitionSpacing() {
-  const spacer = scrollTrigger.spacer;
-  if (!spacer) return;
-
-  const reduction =
-    window.innerHeight * TRANSITION_OVERLAP_VH / 100;
-
-  spacer.style.marginBottom = `-${reduction}px`;
-}
-
-adjustCoinTransitionSpacing();
-
-ScrollTrigger.addEventListener(
-  "refresh",
-  adjustCoinTransitionSpacing
-);
-
     // =========================================
     // AUTOMATIC INTRO
     // =========================================
