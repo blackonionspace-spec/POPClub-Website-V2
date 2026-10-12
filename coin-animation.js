@@ -429,7 +429,7 @@
    COIN → PROBLEM TRANSITION SPACING
    ----------------------------------------- */
 
-const TRANSITION_OVERLAP_VH = 10;
+const TRANSITION_OVERLAP_VH = 20;
 
 function adjustCoinTransitionSpacing() {
   const spacer = scrollTrigger.spacer;
