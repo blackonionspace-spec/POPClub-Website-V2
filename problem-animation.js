@@ -15,7 +15,7 @@
   "use strict";
 
   const CONFIG = {
-  frameProgressEnd: 1500 / 20000,
+  frameProgressEnd: 1500 / 15500,
   crtRevealFrame: 30,
   maxDPR: 2
 };
