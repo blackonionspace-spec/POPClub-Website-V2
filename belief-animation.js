@@ -15,23 +15,23 @@
   "use strict";
 
   const CONFIG = {
-    beliefStart: 5000,
-    beliefDistance: 10500,
-    totalDistance: 15500,
-    maxDPR: 2
-  };
+  beliefStart: 5000,
+  beliefDistance: 6300,
+  totalDistance: 11300,
+  maxDPR: 2
+};
 
   const SEGMENTS = [
-    { type: "hold", frame: 0, distance: 500 },
-    { type: "move", from: 0, to: 49, distance: 1500 },
-    { type: "hold", frame: 49, distance: 1000 },
-    { type: "move", from: 49, to: 89, distance: 1500 },
-    { type: "hold", frame: 89, distance: 1000 },
-    { type: "move", from: 89, to: 129, distance: 1500 },
-    { type: "hold", frame: 129, distance: 1000 },
-    { type: "move", from: 129, to: 169, distance: 1500 },
-    { type: "hold", frame: 169, distance: 1000 }
-  ];
+  { type: "hold", frame: 0, distance: 300 },
+  { type: "move", from: 0, to: 49, distance: 900 },
+  { type: "hold", frame: 49, distance: 600 },
+  { type: "move", from: 49, to: 89, distance: 900 },
+  { type: "hold", frame: 89, distance: 600 },
+  { type: "move", from: 89, to: 129, distance: 900 },
+  { type: "hold", frame: 129, distance: 600 },
+  { type: "move", from: 129, to: 169, distance: 900 },
+  { type: "hold", frame: 169, distance: 600 }
+];
 
   function clamp(value, min, max) {
     return Math.max(min, Math.min(max, value));
