@@ -17,7 +17,7 @@
     maxDPR: 2,
     activationThreshold: 0.6,
     explosionFrame: 38,
-    explosionDuration: 0.5
+    explosionDuration: 0.7
   };
 
   function init() {
