@@ -1,6 +1,6 @@
 document.addEventListener("DOMContentLoaded", () => {
-  const section = document.querySelector(".section_CTA");
-  const effect = document.querySelector(".CTA_bg_effect");
+  const section = document.querySelector(".section_cta");
+const effect = document.querySelector(".cta_bg_effect");
 
   if (!section || !effect || !window.gsap) return;
 
