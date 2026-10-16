@@ -1,8 +1,12 @@
 
 /*
- * POPClub V2 — CTA Coin Animation
- * 40 AVIF frames at 24 FPS
- * Replays whenever CTA re-enters viewport
+ * POPClub V2 — CTA Coin + Background Animation
+ *
+ * Coin: 40 AVIF frames at 24 FPS
+ * Background explosion: starts at frame 5_38
+ * Background: scale 0.1 -> 1, opacity 0 -> 1
+ * Explosion duration: 0.5 seconds
+ * Replays when CTA leaves and re-enters viewport
  */
 
 (() => {
@@ -11,26 +15,38 @@
   const CONFIG = {
     fps: 24,
     maxDPR: 2,
-    activationThreshold: 0.6
+    activationThreshold: 0.6,
+    explosionFrame: 38,
+    explosionDuration: 0.5
   };
 
   function init() {
     const section = document.querySelector(".section_cta");
     const container = document.querySelector(".cta_coin_layer");
+    const bgEffect = document.querySelector(".cta_bg_effect");
     const urls = window.ctaCoinFrameURLs;
 
     if (!section || !container) {
-      console.warn("[CTA Coin] Section or layer not found.");
+      console.warn("[CTA] Section or coin layer not found.");
       return;
     }
 
     if (!Array.isArray(urls) || urls.length !== 40) {
-      console.warn("[CTA Coin] Expected 40 frame URLs.");
+      console.warn("[CTA] Expected 40 coin frame URLs.");
+      return;
+    }
+
+    if (!window.gsap) {
+      console.warn("[CTA] GSAP not found.");
       return;
     }
 
     if (container.dataset.ctaCoinInitialized === "true") return;
     container.dataset.ctaCoinInitialized = "true";
+
+    // --------------------------------------------------
+    // Canvas setup
+    // --------------------------------------------------
 
     const canvas = document.createElement("canvas");
     const ctx = canvas.getContext("2d", { alpha: true });
@@ -58,23 +74,77 @@
     let startTime = 0;
     let currentFrame = -1;
     let rafId = null;
+    let bgExplosionStarted = false;
 
     const duration = urls.length / CONFIG.fps;
 
+    // --------------------------------------------------
+    // Background animation
+    // --------------------------------------------------
+
+    function resetBackground() {
+      bgExplosionStarted = false;
+
+      if (!bgEffect) return;
+
+      gsap.killTweensOf(bgEffect);
+
+      gsap.set(bgEffect, {
+        scale: 0.1,
+        opacity: 0,
+        transformOrigin: "50% 50%"
+      });
+    }
+
+    function startBackgroundExplosion() {
+      if (!bgEffect || bgExplosionStarted) return;
+
+      bgExplosionStarted = true;
+
+      gsap.to(bgEffect, {
+        scale: 1,
+        opacity: 1,
+        duration: CONFIG.explosionDuration,
+        ease: "power2.out",
+        overwrite: true
+      });
+
+      console.log("[CTA] Background explosion started.");
+    }
+
+    // --------------------------------------------------
+    // Canvas sizing
+    // --------------------------------------------------
+
     function resize() {
       const rect = container.getBoundingClientRect();
-      const dpr = Math.min(window.devicePixelRatio || 1, CONFIG.maxDPR);
+      const dpr = Math.min(
+        window.devicePixelRatio || 1,
+        CONFIG.maxDPR
+      );
 
-      canvas.width = Math.max(1, Math.round(rect.width * dpr));
-      canvas.height = Math.max(1, Math.round(rect.height * dpr));
+      canvas.width = Math.max(
+        1,
+        Math.round(rect.width * dpr)
+      );
+
+      canvas.height = Math.max(
+        1,
+        Math.round(rect.height * dpr)
+      );
 
       if (ready && playing && currentFrame >= 0) {
         drawFrame(currentFrame);
       }
     }
 
+    // --------------------------------------------------
+    // Draw AVIF frame
+    // --------------------------------------------------
+
     function drawFrame(index) {
       const img = images[index];
+
       if (!img || !img.naturalWidth) return;
 
       const w = canvas.width;
@@ -82,6 +152,7 @@
 
       ctx.clearRect(0, 0, w, h);
 
+      // Cover behaviour, preserving aspect ratio
       const scale = Math.max(
         w / img.naturalWidth,
         h / img.naturalHeight
@@ -99,6 +170,10 @@
       );
     }
 
+    // --------------------------------------------------
+    // Reset when leaving CTA
+    // --------------------------------------------------
+
     function stopAndReset() {
       if (rafId !== null) {
         cancelAnimationFrame(rafId);
@@ -110,24 +185,43 @@
       currentFrame = -1;
 
       canvas.style.display = "none";
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      ctx.clearRect(
+        0,
+        0,
+        canvas.width,
+        canvas.height
+      );
+
+      resetBackground();
+
+      console.log("[CTA] Reset — ready to replay.");
     }
+
+    // --------------------------------------------------
+    // Complete coin playback
+    // --------------------------------------------------
 
     function complete() {
       playing = false;
       completed = true;
       rafId = null;
 
-      // Hide after the last frame has had its full display time.
       canvas.style.display = "none";
 
-      section.dispatchEvent(new CustomEvent("cta:coin-complete", {
-        bubbles: true,
-        detail: { duration }
-      }));
+      section.dispatchEvent(
+        new CustomEvent("cta:coin-complete", {
+          bubbles: true,
+          detail: { duration }
+        })
+      );
 
-      console.log("[CTA Coin] Complete.");
+      console.log("[CTA] Coin complete.");
     }
+
+    // --------------------------------------------------
+    // Animation loop
+    // --------------------------------------------------
 
     function tick(now) {
       if (!playing || !active) return;
@@ -146,73 +240,121 @@
 
       if (nextFrame !== currentFrame) {
         currentFrame = nextFrame;
+
         drawFrame(currentFrame);
+
+        // Trigger explosion at frame 5_38
+        if (currentFrame >= CONFIG.explosionFrame) {
+          startBackgroundExplosion();
+        }
       }
 
       rafId = requestAnimationFrame(tick);
     }
 
+    // --------------------------------------------------
+    // Start coin animation
+    // --------------------------------------------------
+
     function start() {
       if (!ready || !active || playing || completed) return;
+
+      resetBackground();
 
       playing = true;
       currentFrame = 0;
 
       canvas.style.display = "block";
+
       resize();
       drawFrame(0);
 
       startTime = performance.now();
 
-      section.dispatchEvent(new CustomEvent("cta:coin-start", {
-        bubbles: true
-      }));
+      section.dispatchEvent(
+        new CustomEvent("cta:coin-start", {
+          bubbles: true
+        })
+      );
 
       rafId = requestAnimationFrame(tick);
 
-      console.log("[CTA Coin] Playing at 24 FPS.");
+      console.log("[CTA] Coin playing at 24 FPS.");
     }
 
+    // --------------------------------------------------
+    // Load all 40 AVIF frames
+    // --------------------------------------------------
+
+    resetBackground();
+
     Promise.all(
-      urls.map((url, index) => new Promise((resolve, reject) => {
-        const img = new Image();
+      urls.map((url, index) =>
+        new Promise((resolve, reject) => {
+          const img = new Image();
 
-        img.onload = () => {
-          images[index] = img;
-          resolve();
-        };
+          img.onload = () => {
+            images[index] = img;
+            resolve();
+          };
 
-        img.onerror = () => reject(
-          new Error(`Frame ${index} failed: ${url}`)
-        );
+          img.onerror = () => {
+            reject(
+              new Error(
+                `Coin frame ${index} failed: ${url}`
+              )
+            );
+          };
 
-        img.src = url;
-      }))
-    ).then(() => {
-      ready = true;
-      console.log("[CTA Coin] All 40 frames loaded.");
-      start();
-    }).catch(error => {
-      console.error("[CTA Coin]", error);
-    });
+          img.src = url;
+        })
+      )
+    )
+      .then(() => {
+        ready = true;
+
+        console.log("[CTA] All 40 frames loaded.");
+
+        start();
+      })
+      .catch(error => {
+        console.error("[CTA]", error);
+      });
+
+    // --------------------------------------------------
+    // Resize listener
+    // --------------------------------------------------
 
     resize();
+
     window.addEventListener("resize", resize);
 
-    const observer = new IntersectionObserver(entries => {
-      const visible = entries[0].intersectionRatio >=
-        CONFIG.activationThreshold;
+    // --------------------------------------------------
+    // Replay on CTA re-entry
+    // --------------------------------------------------
 
-      if (visible && !active) {
-        active = true;
-        start();
-      } else if (!visible && active) {
-        active = false;
-        stopAndReset();
+    const observer = new IntersectionObserver(
+      entries => {
+        const visible =
+          entries[0].intersectionRatio >=
+          CONFIG.activationThreshold;
+
+        if (visible && !active) {
+          active = true;
+          start();
+        } else if (!visible && active) {
+          active = false;
+          stopAndReset();
+        }
+      },
+      {
+        threshold: [
+          0,
+          CONFIG.activationThreshold,
+          1
+        ]
       }
-    }, {
-      threshold: [0, CONFIG.activationThreshold, 1]
-    });
+    );
 
     observer.observe(section);
   }
