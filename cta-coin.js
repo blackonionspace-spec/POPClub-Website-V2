@@ -3,12 +3,13 @@
  * POPClub V2 — CTA Coin + Background Animation
  *
  * Coin: 40 AVIF frames at 24 FPS
- * Background explosion starts at frame 5_38
- * Background scale: 0.1 -> 1
- * Background opacity: 0 -> 1
+ * Activation: CTA 87% visible
+ * First coin frame visible before activation
+ * Background explosion begins at frame 5_38
+ * Background: 0.1 -> 1.1 -> 1.0 scale
  * Explosion duration: 0.7 seconds
- * Radial mask expands and disappears at full scale
- * Replays when CTA leaves and re-enters viewport
+ * Radial feather expands beyond the video edges
+ * Replays on CTA re-entry
  */
 
 (() => {
@@ -17,11 +18,10 @@
   const CONFIG = {
     fps: 24,
     maxDPR: 2,
-    activationThreshold: 0.6,
+    activationThreshold: 0.87,
     explosionFrame: 38,
     explosionDuration: 0.7,
 
-    // Radial mask settings
     maskStartRadius: 55,
     maskEndRadius: 230,
     maskFeather: 20
@@ -141,7 +141,7 @@
     }
 
     // --------------------------------------------------
-    // Background explosion
+    // Background explosion with overshoot
     // --------------------------------------------------
 
     function startBackgroundExplosion() {
@@ -162,15 +162,22 @@
         }
       });
 
-      // Scale and opacity
+      // Expand to 110% in 0.5 seconds
       bgTimeline.to(bgEffect, {
-        scale: 1,
+        scale: 1.1,
         opacity: 1,
-        duration: CONFIG.explosionDuration,
+        duration: 0.5,
         ease: "power2.out"
       }, 0);
 
-      // Radial mask expansion — same timing and easing
+      // Settle back to 100% over 0.2 seconds
+      bgTimeline.to(bgEffect, {
+        scale: 1,
+        duration: 0.2,
+        ease: "power2.inOut"
+      }, 0.5);
+
+      // Expand radial mask throughout all 0.7 seconds
       bgTimeline.to(maskState, {
         radius: CONFIG.maskEndRadius,
         duration: CONFIG.explosionDuration,
@@ -204,13 +211,13 @@
         Math.round(rect.height * dpr)
       );
 
-      if (ready && playing && currentFrame >= 0) {
+      if (ready && currentFrame >= 0 && !completed) {
         drawFrame(currentFrame);
       }
     }
 
     // --------------------------------------------------
-    // Draw AVIF frame
+    // Draw coin frame
     // --------------------------------------------------
 
     function drawFrame(index) {
@@ -252,20 +259,14 @@
 
       playing = false;
       completed = false;
-      currentFrame = -1;
+      currentFrame = 0;
 
-      canvas.style.display = "none";
-
-      ctx.clearRect(
-        0,
-        0,
-        canvas.width,
-        canvas.height
-      );
+      canvas.style.display = "block";
+      drawFrame(0);
 
       resetBackground();
 
-      console.log("[CTA] Reset — ready to replay.");
+      console.log("[CTA] Reset — first frame restored.");
     }
 
     // --------------------------------------------------
@@ -290,7 +291,7 @@
     }
 
     // --------------------------------------------------
-    // Animation loop
+    // Coin animation loop
     // --------------------------------------------------
 
     function tick(now) {
@@ -313,7 +314,6 @@
 
         drawFrame(currentFrame);
 
-        // Trigger explosion at frame 5_38
         if (currentFrame >= CONFIG.explosionFrame) {
           startBackgroundExplosion();
         }
@@ -382,6 +382,11 @@
     )
       .then(() => {
         ready = true;
+
+        // Display frame 5_00 before activation
+        currentFrame = 0;
+        canvas.style.display = "block";
+        drawFrame(0);
 
         console.log("[CTA] All 40 frames loaded.");
 
