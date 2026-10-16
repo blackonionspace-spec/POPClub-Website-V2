@@ -3,9 +3,11 @@
  * POPClub V2 — CTA Coin + Background Animation
  *
  * Coin: 40 AVIF frames at 24 FPS
- * Background explosion: starts at frame 5_38
- * Background: scale 0.1 -> 1, opacity 0 -> 1
- * Explosion duration: 0.5 seconds
+ * Background explosion starts at frame 5_38
+ * Background scale: 0.1 -> 1
+ * Background opacity: 0 -> 1
+ * Explosion duration: 0.7 seconds
+ * Radial mask expands and disappears at full scale
  * Replays when CTA leaves and re-enters viewport
  */
 
@@ -17,7 +19,12 @@
     maxDPR: 2,
     activationThreshold: 0.6,
     explosionFrame: 38,
-    explosionDuration: 0.7
+    explosionDuration: 0.7,
+
+    // Radial mask settings
+    maskStartRadius: 55,
+    maskEndRadius: 230,
+    maskFeather: 20
   };
 
   function init() {
@@ -75,17 +82,52 @@
     let currentFrame = -1;
     let rafId = null;
     let bgExplosionStarted = false;
+    let bgTimeline = null;
 
     const duration = urls.length / CONFIG.fps;
 
     // --------------------------------------------------
-    // Background animation
+    // Expanding radial mask
+    // --------------------------------------------------
+
+    function setRadialMask(radius) {
+      if (!bgEffect) return;
+
+      const innerRadius = Math.max(
+        0,
+        radius - CONFIG.maskFeather
+      );
+
+      const mask = `radial-gradient(
+        ellipse at center,
+        black ${innerRadius}%,
+        transparent ${radius}%
+      )`;
+
+      bgEffect.style.webkitMaskImage = mask;
+      bgEffect.style.maskImage = mask;
+    }
+
+    function removeRadialMask() {
+      if (!bgEffect) return;
+
+      bgEffect.style.webkitMaskImage = "none";
+      bgEffect.style.maskImage = "none";
+    }
+
+    // --------------------------------------------------
+    // Background reset
     // --------------------------------------------------
 
     function resetBackground() {
       bgExplosionStarted = false;
 
       if (!bgEffect) return;
+
+      if (bgTimeline) {
+        bgTimeline.kill();
+        bgTimeline = null;
+      }
 
       gsap.killTweensOf(bgEffect);
 
@@ -94,20 +136,49 @@
         opacity: 0,
         transformOrigin: "50% 50%"
       });
+
+      setRadialMask(CONFIG.maskStartRadius);
     }
+
+    // --------------------------------------------------
+    // Background explosion
+    // --------------------------------------------------
 
     function startBackgroundExplosion() {
       if (!bgEffect || bgExplosionStarted) return;
 
       bgExplosionStarted = true;
 
-      gsap.to(bgEffect, {
+      const maskState = {
+        radius: CONFIG.maskStartRadius
+      };
+
+      bgTimeline = gsap.timeline({
+        onComplete: () => {
+          removeRadialMask();
+          bgTimeline = null;
+
+          console.log("[CTA] Background explosion complete.");
+        }
+      });
+
+      // Scale and opacity
+      bgTimeline.to(bgEffect, {
         scale: 1,
         opacity: 1,
         duration: CONFIG.explosionDuration,
+        ease: "power2.out"
+      }, 0);
+
+      // Radial mask expansion — same timing and easing
+      bgTimeline.to(maskState, {
+        radius: CONFIG.maskEndRadius,
+        duration: CONFIG.explosionDuration,
         ease: "power2.out",
-        overwrite: true
-      });
+        onUpdate: () => {
+          setRadialMask(maskState.radius);
+        }
+      }, 0);
 
       console.log("[CTA] Background explosion started.");
     }
@@ -152,7 +223,6 @@
 
       ctx.clearRect(0, 0, w, h);
 
-      // Cover behaviour, preserving aspect ratio
       const scale = Math.max(
         w / img.naturalWidth,
         h / img.naturalHeight
