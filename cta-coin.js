@@ -1,15 +1,15 @@
 
 /*
  * POPClub V2 — CTA Coin Animation
- * 40 AVIF frames, 1.5-second autoplay
- * Uses window.ctaCoinFrameURLs
+ * 40 AVIF frames at 24 FPS
+ * Replays whenever CTA re-enters viewport
  */
 
 (() => {
   "use strict";
 
   const CONFIG = {
-    duration: 1.5,
+    fps: 24,
     maxDPR: 2,
     activationThreshold: 0.6
   };
@@ -20,7 +20,7 @@
     const urls = window.ctaCoinFrameURLs;
 
     if (!section || !container) {
-      console.warn("[CTA Coin] Section or coin layer not found.");
+      console.warn("[CTA Coin] Section or layer not found.");
       return;
     }
 
@@ -50,12 +50,16 @@
     container.style.pointerEvents = "none";
 
     const images = new Array(urls.length);
+
     let ready = false;
-    let activated = false;
-    let started = false;
-    let finished = false;
-    let currentFrame = 0;
-    let animationStart = 0;
+    let active = false;
+    let playing = false;
+    let completed = false;
+    let startTime = 0;
+    let currentFrame = -1;
+    let rafId = null;
+
+    const duration = urls.length / CONFIG.fps;
 
     function resize() {
       const rect = container.getBoundingClientRect();
@@ -64,7 +68,9 @@
       canvas.width = Math.max(1, Math.round(rect.width * dpr));
       canvas.height = Math.max(1, Math.round(rect.height * dpr));
 
-      if (ready && !finished) drawFrame(currentFrame);
+      if (ready && playing && currentFrame >= 0) {
+        drawFrame(currentFrame);
+      }
     }
 
     function drawFrame(index) {
@@ -76,7 +82,6 @@
 
       ctx.clearRect(0, 0, w, h);
 
-      // Cover: preserve image aspect ratio, crop evenly if necessary.
       const scale = Math.max(
         w / img.naturalWidth,
         h / img.naturalHeight
@@ -94,35 +99,49 @@
       );
     }
 
-    function complete() {
-      if (finished) return;
+    function stopAndReset() {
+      if (rafId !== null) {
+        cancelAnimationFrame(rafId);
+        rafId = null;
+      }
 
-      finished = true;
+      playing = false;
+      completed = false;
+      currentFrame = -1;
+
+      canvas.style.display = "none";
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+    }
+
+    function complete() {
+      playing = false;
+      completed = true;
+      rafId = null;
+
+      // Hide after the last frame has had its full display time.
       canvas.style.display = "none";
 
       section.dispatchEvent(new CustomEvent("cta:coin-complete", {
         bubbles: true,
-        detail: { duration: CONFIG.duration }
+        detail: { duration }
       }));
 
-      console.log("[CTA Coin] Complete — explosion can begin.");
+      console.log("[CTA Coin] Complete.");
     }
 
     function tick(now) {
-      if (finished) return;
+      if (!playing || !active) return;
 
-      const elapsed = (now - animationStart) / 1000;
+      const elapsed = (now - startTime) / 1000;
 
-      if (elapsed >= CONFIG.duration) {
+      if (elapsed >= duration) {
         complete();
         return;
       }
 
-      const progress = elapsed / CONFIG.duration;
-
       const nextFrame = Math.min(
-        images.length - 1,
-        Math.floor(progress * images.length)
+        urls.length - 1,
+        Math.floor(elapsed * CONFIG.fps)
       );
 
       if (nextFrame !== currentFrame) {
@@ -130,68 +149,72 @@
         drawFrame(currentFrame);
       }
 
-      requestAnimationFrame(tick);
+      rafId = requestAnimationFrame(tick);
     }
 
     function start() {
-      if (started || !ready || !activated) return;
+      if (!ready || !active || playing || completed) return;
 
-      started = true;
+      playing = true;
       currentFrame = 0;
 
+      canvas.style.display = "block";
       resize();
       drawFrame(0);
 
-      animationStart = performance.now();
-      requestAnimationFrame(tick);
+      startTime = performance.now();
 
       section.dispatchEvent(new CustomEvent("cta:coin-start", {
         bubbles: true
       }));
 
-      console.log("[CTA Coin] Playing 40 frames over 1.5 seconds.");
+      rafId = requestAnimationFrame(tick);
+
+      console.log("[CTA Coin] Playing at 24 FPS.");
     }
 
-    function loadFrames() {
-      Promise.all(
-        urls.map((url, index) => new Promise((resolve, reject) => {
-          const img = new Image();
+    Promise.all(
+      urls.map((url, index) => new Promise((resolve, reject) => {
+        const img = new Image();
 
-          img.onload = () => {
-            images[index] = img;
-            resolve();
-          };
+        img.onload = () => {
+          images[index] = img;
+          resolve();
+        };
 
-          img.onerror = () => reject(new Error(
-            `Could not load coin frame ${index}: ${url}`
-          ));
+        img.onerror = () => reject(
+          new Error(`Frame ${index} failed: ${url}`)
+        );
 
-          img.src = url;
-        }))
-      ).then(() => {
-        ready = true;
-        console.log("[CTA Coin] All 40 frames loaded.");
-        start();
-      }).catch(error => {
-        console.error("[CTA Coin]", error);
-      });
-    }
+        img.src = url;
+      }))
+    ).then(() => {
+      ready = true;
+      console.log("[CTA Coin] All 40 frames loaded.");
+      start();
+    }).catch(error => {
+      console.error("[CTA Coin]", error);
+    });
 
     resize();
     window.addEventListener("resize", resize);
 
     const observer = new IntersectionObserver(entries => {
-      if (entries[0].intersectionRatio >= CONFIG.activationThreshold) {
-        activated = true;
-        observer.disconnect();
+      const visible = entries[0].intersectionRatio >=
+        CONFIG.activationThreshold;
+
+      if (visible && !active) {
+        active = true;
         start();
+      } else if (!visible && active) {
+        active = false;
+        stopAndReset();
       }
     }, {
       threshold: [0, CONFIG.activationThreshold, 1]
     });
 
     observer.observe(section);
-    loadFrames();
   }
 
   if (document.readyState === "loading") {
