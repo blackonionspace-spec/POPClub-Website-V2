@@ -405,38 +405,50 @@
     window.addEventListener("resize", resize);
 
     // --------------------------------------------------
-    // Replay on CTA re-entry
-    // --------------------------------------------------
+// Activate at 87% visibility
+// Reset only after leaving section by another 20vh
+// --------------------------------------------------
 
-    const observer = new IntersectionObserver(
-      entries => {
-        const visible =
-          entries[0].intersectionRatio >=
-          CONFIG.activationThreshold;
+const RESET_OVERSHOOT = 0.2;
 
-        if (visible && !active) {
-          active = true;
-          start();
-        } else if (!visible && active) {
-          active = false;
-          stopAndReset();
-        }
-      },
-      {
-        threshold: [
-          0,
-          CONFIG.activationThreshold,
-          1
-        ]
-      }
-    );
+function checkCTAVisibility() {
+  const rect = section.getBoundingClientRect();
+  const viewportHeight = window.innerHeight;
 
-    observer.observe(section);
+  const visibleHeight = Math.max(
+    0,
+    Math.min(rect.bottom, viewportHeight) -
+    Math.max(rect.top, 0)
+  );
+
+  const visibilityRatio = visibleHeight / rect.height;
+
+  // Start only when 87% of the CTA is visible
+  if (!active && visibilityRatio >= CONFIG.activationThreshold) {
+    active = true;
+    start();
   }
 
-  if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", init);
-  } else {
-    init();
+  // Reset only when the CTA is fully outside the viewport
+  // PLUS another 20% of viewport height
+  if (active) {
+    const exitedAbove =
+      rect.bottom < -viewportHeight * RESET_OVERSHOOT;
+
+    const exitedBelow =
+      rect.top > viewportHeight * (1 + RESET_OVERSHOOT);
+
+    if (exitedAbove || exitedBelow) {
+      active = false;
+      stopAndReset();
+    }
   }
-})();
+}
+
+window.addEventListener("scroll", checkCTAVisibility, {
+  passive: true
+});
+
+window.addEventListener("resize", checkCTAVisibility);
+
+checkCTAVisibility();
