@@ -43,10 +43,14 @@
   const FPS_END = 65;
   const RESET_OVERSHOOT = 0.2;
 
-  section.addEventListener("cta:coin-complete", () => {
+  const GLB_START_TIME = 1.17; // Seconds after coin starts
+
+section.addEventListener("cta:coin-start", () => {
+  gsap.delayedCall(GLB_START_TIME, () => {
     requested = true;
     if (ready) start();
   });
+});
 
   // -----------------------------------------------
   // Import Three.js
