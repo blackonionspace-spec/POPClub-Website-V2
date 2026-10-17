@@ -452,3 +452,11 @@ window.addEventListener("scroll", checkCTAVisibility, {
 window.addEventListener("resize", checkCTAVisibility);
 
 checkCTAVisibility();
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", init);
+  } else {
+    init();
+  }
+})();
