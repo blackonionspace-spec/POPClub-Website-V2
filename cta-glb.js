@@ -43,7 +43,7 @@
   const FPS_END = 65;
   const RESET_OVERSHOOT = 0.2;
 
-  const GLB_START_TIME = 1.17; // Seconds after coin starts
+  const GLB_START_TIME = 1.42; // Seconds after coin starts
 
 section.addEventListener("cta:coin-start", () => {
   gsap.delayedCall(GLB_START_TIME, () => {
