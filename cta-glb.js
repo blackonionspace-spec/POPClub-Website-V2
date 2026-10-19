@@ -1,5 +1,5 @@
 
-/* POPClub V2 — CTA GLB V10 Webflow integration */
+/* POPClub V2 — CTA GLB V10 two-pass compositing integration */
 (async () => {
   'use strict';
 
@@ -39,6 +39,7 @@
   let ready = false;
   let playing = false;
   let settled = false;
+
   let elapsed = 0;
   let floatElapsed = 0;
   let sceneTime = 0;
@@ -46,7 +47,7 @@
   let startTimer = null;
   let generation = 0;
 
-  const resetBoundaryPassed = () => {
+  function resetBoundaryPassed() {
     const r = section.getBoundingClientRect();
     const h = innerHeight;
 
@@ -54,7 +55,7 @@
       r.bottom < -h * RESET_OVERSHOOT ||
       r.top > h * (1 + RESET_OVERSHOOT)
     );
-  };
+  }
 
   function cancelStartTimer() {
     if (startTimer) {
@@ -79,12 +80,10 @@
       if (token !== generation || resetBoundaryPassed()) return;
 
       requested = true;
-
       if (ready) start();
     });
   });
 
-  // Three.js imports
   let THREE, GLTFLoader;
 
   try {
@@ -97,19 +96,19 @@
     return;
   }
 
-  // Scene and transparent renderer
   const scene = new THREE.Scene();
 
   const renderer = new THREE.WebGLRenderer({
     antialias: true,
-    alpha: true
+    alpha: true,
+    premultipliedAlpha: false
   });
 
   renderer.setPixelRatio(Math.min(devicePixelRatio || 1, 2));
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = 1.3;
-  renderer.setClearColor(0x000000, 1);
+  renderer.setClearColor(0x000000, 0);
 
   renderer.domElement.style.cssText = [
     'position:absolute',
@@ -126,7 +125,7 @@
   host.appendChild(renderer.domElement);
   host.style.pointerEvents = 'auto';
 
-  // Approved V7 camera
+  // Approved 85mm camera
   const axis = new THREE.Quaternion().setFromAxisAngle(
     new THREE.Vector3(1, 0, 0),
     -Math.PI / 2
@@ -146,6 +145,107 @@
 
   camera.quaternion.copy(axis);
 
+  // TWO-PASS COMPOSITING
+  // Beauty: render cards against opaque black.
+  // Mask: render card silhouettes independently.
+  // Composite: preserve beauty RGB with silhouette alpha.
+
+  const beautyTarget = new THREE.WebGLRenderTarget(1, 1, {
+    format: THREE.RGBAFormat,
+    type: THREE.UnsignedByteType,
+    colorSpace: THREE.SRGBColorSpace,
+    depthBuffer: true,
+    samples: 4
+  });
+
+  const maskTarget = new THREE.WebGLRenderTarget(1, 1, {
+    format: THREE.RGBAFormat,
+    type: THREE.UnsignedByteType,
+    depthBuffer: true,
+    samples: 4
+  });
+
+  const maskMaterial = new THREE.MeshBasicMaterial({
+    color: 0xffffff,
+    side: THREE.DoubleSide,
+    depthWrite: true,
+    depthTest: true,
+    toneMapped: false
+  });
+
+  const compositeScene = new THREE.Scene();
+
+  const compositeCamera = new THREE.OrthographicCamera(
+    -1, 1, 1, -1, 0, 1
+  );
+
+  const compositeMaterial = new THREE.ShaderMaterial({
+    uniforms: {
+      tBeauty: { value: beautyTarget.texture },
+      tMask: { value: maskTarget.texture }
+    },
+    depthTest: false,
+    depthWrite: false,
+    blending: THREE.NoBlending,
+    toneMapped: false,
+
+    vertexShader: `
+      varying vec2 vUv;
+
+      void main() {
+        vUv = uv;
+        gl_Position = vec4(position.xy, 0.0, 1.0);
+      }
+    `,
+
+    fragmentShader: `
+      uniform sampler2D tBeauty;
+      uniform sampler2D tMask;
+      varying vec2 vUv;
+
+      void main() {
+        vec3 rgb = texture2D(tBeauty, vUv).rgb;
+        float coverage = texture2D(tMask, vUv).r;
+
+        gl_FragColor = vec4(rgb, coverage);
+        #include <colorspace_fragment>
+      }
+    `
+  });
+
+  compositeScene.add(
+    new THREE.Mesh(
+      new THREE.PlaneGeometry(2, 2),
+      compositeMaterial
+    )
+  );
+
+  function renderComposited() {
+    // Pass 1: black-background V10 appearance
+    renderer.setRenderTarget(beautyTarget);
+    renderer.setClearColor(0x000000, 1);
+    renderer.clear(true, true, true);
+    renderer.render(scene, camera);
+
+    // Pass 2: geometry silhouette
+    const previousOverride = scene.overrideMaterial;
+
+    scene.overrideMaterial = maskMaterial;
+
+    renderer.setRenderTarget(maskTarget);
+    renderer.setClearColor(0x000000, 0);
+    renderer.clear(true, true, true);
+    renderer.render(scene, camera);
+
+    scene.overrideMaterial = previousOverride;
+
+    // Pass 3: transparent output over Webflow video
+    renderer.setRenderTarget(null);
+    renderer.setClearColor(0x000000, 0);
+    renderer.clear(true, true, true);
+    renderer.render(compositeScene, compositeCamera);
+  }
+
   function resize() {
     const w = Math.max(1, host.clientWidth);
     const h = Math.max(1, host.clientHeight);
@@ -162,6 +262,18 @@
 
     renderer.setSize(w, h, false);
 
+    const pixelRatio = renderer.getPixelRatio();
+
+    beautyTarget.setSize(
+      Math.max(1, Math.round(w * pixelRatio)),
+      Math.max(1, Math.round(h * pixelRatio))
+    );
+
+    maskTarget.setSize(
+      Math.max(1, Math.round(w * pixelRatio)),
+      Math.max(1, Math.round(h * pixelRatio))
+    );
+
     camera.aspect = ratio;
     camera.fov = THREE.MathUtils.radToDeg(vfov);
     camera.updateProjectionMatrix();
@@ -173,36 +285,55 @@
   // Approved V10 lighting
   scene.add(new THREE.AmbientLight(0xffffff, 1));
 
-  const warm = new THREE.PointLight(0xff651a, 90, 0, 2);
+  const warm = new THREE.PointLight(
+    0xff651a, 90, 0, 2
+  );
+
   warm.position.set(-2, 2, 2);
   scene.add(warm);
 
   const highlightColors = [
-    0xffa45c, 0xff752d, 0xffc18a,
-    0xff8a40, 0xffb46c, 0xff7025
+    0xffa45c,
+    0xff752d,
+    0xffc18a,
+    0xff8a40,
+    0xffb46c,
+    0xff7025
   ];
 
   const cardHighlights = highlightColors.map(color => {
-    const lamp = new THREE.PointLight(color, 36, 6.5, 2);
+    const lamp = new THREE.PointLight(
+      color, 36, 6.5, 2
+    );
+
     scene.add(lamp);
     return lamp;
   });
 
-  const fill = new THREE.DirectionalLight(0xffffff, 1);
+  const fill = new THREE.DirectionalLight(
+    0xffffff, 1
+  );
+
   fill.position.set(3, 4, 5);
   scene.add(fill);
 
-  const rim = new THREE.DirectionalLight(0xff9d56, 5);
+  const rim = new THREE.DirectionalLight(
+    0xff9d56, 5
+  );
+
   rim.position.set(-3, -2, -4);
   scene.add(rim);
 
-  // V10 camera-invisible orange reflection environment
+  // Camera-invisible V10 reflection environment
   const envCanvas = document.createElement('canvas');
+
   envCanvas.width = 1024;
   envCanvas.height = 512;
 
   const ec = envCanvas.getContext('2d');
-  const gradient = ec.createLinearGradient(0, 0, 0, 512);
+  const gradient = ec.createLinearGradient(
+    0, 0, 0, 512
+  );
 
   gradient.addColorStop(0, '#180702');
   gradient.addColorStop(0.5, '#341004');
@@ -220,12 +351,14 @@
     );
 
     g.addColorStop(0, 'rgba(255,75,8,0)');
+
     g.addColorStop(
       0.5,
       i % 3 === 0
         ? 'rgba(255,190,110,.9)'
         : 'rgba(255,90,20,.7)'
     );
+
     g.addColorStop(1, 'rgba(255,75,8,0)');
 
     ec.fillStyle = g;
@@ -238,9 +371,13 @@
     );
   }
 
-  const envTexture = new THREE.CanvasTexture(envCanvas);
+  const envTexture = new THREE.CanvasTexture(
+    envCanvas
+  );
 
-  envTexture.mapping = THREE.EquirectangularReflectionMapping;
+  envTexture.mapping =
+    THREE.EquirectangularReflectionMapping;
+
   envTexture.colorSpace = THREE.SRGBColorSpace;
 
   scene.environment = envTexture;
@@ -248,19 +385,24 @@
 
   // Models and Blender transforms
   const loader = new GLTFLoader();
+
   const cardObjects = {};
   const glassMaterials = [];
 
   let data;
 
   function fromBlender(p) {
-    return new THREE.Vector3(p[0], p[2], -p[1]);
+    return new THREE.Vector3(
+      p[0], p[2], -p[1]
+    );
   }
 
   function qFromBlender(q) {
     return axis.clone()
       .multiply(
-        new THREE.Quaternion(q[1], q[2], q[3], q[0])
+        new THREE.Quaternion(
+          q[1], q[2], q[3], q[0]
+        )
       )
       .multiply(axisInverse)
       .normalize();
@@ -271,12 +413,21 @@
       (f - 25) / 40, 0, 1
     );
 
-    return 1 + 0.5 * (t * t * (3 - 2 * t));
+    return 1 + 0.5 * (
+      t * t * (3 - 2 * t)
+    );
   }
 
-  function applyTransform(group, s, multiplier = 1.5) {
-    group.position.copy(fromBlender(s.position));
-    group.quaternion.copy(qFromBlender(s.quaternion));
+  function applyTransform(
+    group, s, multiplier = 1.5
+  ) {
+    group.position.copy(
+      fromBlender(s.position)
+    );
+
+    group.quaternion.copy(
+      qFromBlender(s.quaternion)
+    );
 
     group.scale.set(
       s.scale[0] * multiplier,
@@ -320,17 +471,24 @@
           v, b.position[j], t
         )
       ),
+
       scale: a.scale.map(
         (v, j) => THREE.MathUtils.lerp(
           v, b.scale[j], t
         )
       ),
-      quaternion: [q1.w, q1.x, q1.y, q1.z]
+
+      quaternion: [
+        q1.w, q1.x, q1.y, q1.z
+      ]
     };
   }
 
   function setFrame(f) {
-    for (const [name, entry] of Object.entries(data.cards)) {
+    for (
+      const [name, entry]
+      of Object.entries(data.cards)
+    ) {
       applyTransform(
         cardObjects[name],
         sampleAt(entry.samples, f),
@@ -339,9 +497,10 @@
     }
   }
 
-  // V10 individual-card mouse interaction
+  // Individual-card V10 mouse interaction
   const raycaster = new THREE.Raycaster();
   const pointerNDC = new THREE.Vector2();
+
   const dragRotations = new Map();
   const identityQuat = new THREE.Quaternion();
 
@@ -356,7 +515,8 @@
   let drag = null;
 
   function pickCard(event) {
-    const b = renderer.domElement.getBoundingClientRect();
+    const b =
+      renderer.domElement.getBoundingClientRect();
 
     if (!b.width || !b.height) return null;
 
@@ -379,7 +539,10 @@
         node = node.parent;
       }
 
-      if (node && cardObjects[node.name] === node) {
+      if (
+        node &&
+        cardObjects[node.name] === node
+      ) {
         return node.name;
       }
     }
@@ -400,7 +563,9 @@
     const id = drag.pointerId;
     drag = null;
 
-    if (renderer.domElement.hasPointerCapture(id)) {
+    if (
+      renderer.domElement.hasPointerCapture(id)
+    ) {
       renderer.domElement.releasePointerCapture(id);
     }
 
@@ -410,70 +575,89 @@
   function resetInteractions() {
     releaseDrag();
     dragRotations.clear();
+
     renderer.domElement.style.cursor = 'default';
   }
 
-  renderer.domElement.addEventListener('pointerdown', event => {
-    if (!ready || !settled || event.button !== 0) return;
+  renderer.domElement.addEventListener(
+    'pointerdown',
+    event => {
+      if (
+        !ready ||
+        !settled ||
+        event.button !== 0
+      ) return;
 
-    const name = pickCard(event);
-    if (!name) return;
+      const name = pickCard(event);
+      if (!name) return;
 
-    event.preventDefault();
+      event.preventDefault();
 
-    drag = {
-      name,
-      pointerId: event.pointerId,
-      x: event.clientX,
-      y: event.clientY
-    };
+      drag = {
+        name,
+        pointerId: event.pointerId,
+        x: event.clientX,
+        y: event.clientY
+      };
 
-    if (!dragRotations.has(name)) {
-      dragRotations.set(name, {
-        target: new THREE.Quaternion(),
-        current: new THREE.Quaternion(),
-        dragging: false
-      });
-    }
+      if (!dragRotations.has(name)) {
+        dragRotations.set(name, {
+          target: new THREE.Quaternion(),
+          current: new THREE.Quaternion(),
+          dragging: false
+        });
+      }
 
-    dragRotations.get(name).dragging = true;
+      dragRotations.get(name).dragging = true;
 
-    renderer.domElement.setPointerCapture(event.pointerId);
-    renderer.domElement.style.cursor = 'grabbing';
-  });
+      renderer.domElement.setPointerCapture(
+        event.pointerId
+      );
 
-  renderer.domElement.addEventListener('pointermove', event => {
-    if (drag && drag.pointerId === event.pointerId) {
-      const dx = event.clientX - drag.x;
-      const dy = event.clientY - drag.y;
-
-      drag.x = event.clientX;
-      drag.y = event.clientY;
-
-      const state = dragRotations.get(drag.name);
-
-      const horizontal = new THREE.Quaternion()
-        .setFromAxisAngle(
-          cameraUp,
-          dx * DRAG_RADIANS_PER_PIXEL
-        );
-
-      const vertical = new THREE.Quaternion()
-        .setFromAxisAngle(
-          cameraRight,
-          dy * DRAG_RADIANS_PER_PIXEL
-        );
-
-      state.target
-        .premultiply(horizontal)
-        .premultiply(vertical)
-        .normalize();
-
-    } else if (ready && settled) {
       renderer.domElement.style.cursor =
-        pickCard(event) ? 'grab' : 'default';
+        'grabbing';
     }
-  });
+  );
+
+  renderer.domElement.addEventListener(
+    'pointermove',
+    event => {
+      if (
+        drag &&
+        drag.pointerId === event.pointerId
+      ) {
+        const dx = event.clientX - drag.x;
+        const dy = event.clientY - drag.y;
+
+        drag.x = event.clientX;
+        drag.y = event.clientY;
+
+        const state =
+          dragRotations.get(drag.name);
+
+        const horizontal = new THREE.Quaternion()
+          .setFromAxisAngle(
+            cameraUp,
+            dx * DRAG_RADIANS_PER_PIXEL
+          );
+
+        const vertical = new THREE.Quaternion()
+          .setFromAxisAngle(
+            cameraRight,
+            dy * DRAG_RADIANS_PER_PIXEL
+          );
+
+        state.target
+          .premultiply(horizontal)
+          .premultiply(vertical)
+          .normalize();
+
+      } else if (ready && settled) {
+        renderer.domElement.style.cursor =
+          pickCard(event) ? 'grab' : 'default';
+      }
+    }
+  );
 
   renderer.domElement.addEventListener(
     'pointerup', releaseDrag
@@ -487,7 +671,9 @@
     'lostpointercapture', releaseDrag
   );
 
-  window.addEventListener('blur', () => releaseDrag());
+  window.addEventListener(
+    'blur', () => releaseDrag()
+  );
 
   // Playback and reset
   function reset() {
@@ -497,12 +683,14 @@
     requested = false;
     playing = false;
     settled = false;
+
     elapsed = 0;
     floatElapsed = 0;
 
     resetInteractions();
 
-    renderer.domElement.style.visibility = 'hidden';
+    renderer.domElement.style.visibility =
+      'hidden';
 
     if (ready) setFrame(START_FRAME);
   }
@@ -524,29 +712,44 @@
 
     setFrame(START_FRAME);
 
-    renderer.domElement.style.visibility = 'visible';
+    renderer.domElement.style.visibility =
+      'visible';
 
-    console.log('[CTA GLB] V10 animation started');
+    console.log(
+      '[CTA GLB] V10 animation started'
+    );
   }
 
   function checkReset() {
     if (
       resetBoundaryPassed() &&
-      (requested || playing || settled || startTimer)
+      (
+        requested ||
+        playing ||
+        settled ||
+        startTimer
+      )
     ) {
       reset();
     }
   }
 
-  window.addEventListener('scroll', checkReset, {
-    passive: true
-  });
+  window.addEventListener(
+    'scroll',
+    checkReset,
+    { passive: true }
+  );
 
-  window.addEventListener('resize', checkReset);
+  window.addEventListener(
+    'resize',
+    checkReset
+  );
 
-  // Load the existing GLBs and animation.json
+  // Load six GLBs and animation.json
   try {
-    const response = await fetch(BASE + 'animation.json');
+    const response = await fetch(
+      BASE + 'animation.json'
+    );
 
     if (!response.ok) {
       throw new Error(
@@ -557,56 +760,66 @@
     data = await response.json();
 
     await Promise.all(
-      Object.entries(FILES).map(async ([name, file]) => {
-        const gltf = await loader.loadAsync(BASE + file);
+      Object.entries(FILES).map(
+        async ([name, file]) => {
+          const gltf = await loader.loadAsync(
+            BASE + file
+          );
 
-        const group = new THREE.Group();
+          const group = new THREE.Group();
 
-        group.name = name;
-        group.add(gltf.scene);
-        scene.add(group);
+          group.name = name;
+          group.add(gltf.scene);
 
-        cardObjects[name] = group;
+          scene.add(group);
+          cardObjects[name] = group;
 
-        gltf.scene.traverse(object => {
-          if (!object.isMesh) return;
+          gltf.scene.traverse(object => {
+            if (!object.isMesh) return;
 
-          const meshName = object.name.toLowerCase();
+            const meshName =
+              object.name.toLowerCase();
 
-          if (meshName.includes('glass')) {
-            const m = object.material;
+            if (meshName.includes('glass')) {
+              const m = object.material;
 
-            m.ior = 1.5;
-            m.thickness = 0.15;
-            m.roughness = 0.30;
-            m.specularIntensity = 0.65;
-            m.envMapIntensity = 0.65;
-            m.needsUpdate = true;
+              m.ior = 1.5;
+              m.thickness = 0.15;
+              m.roughness = 0.30;
+              m.specularIntensity = 0.65;
+              m.envMapIntensity = 0.65;
+              m.needsUpdate = true;
 
-            glassMaterials.push(m);
+              glassMaterials.push(m);
 
-          } else if (meshName.includes('artwork')) {
-            const original = object.material;
+            } else if (
+              meshName.includes('artwork')
+            ) {
+              const original =
+                object.material;
 
-            const unlit = new THREE.MeshBasicMaterial({
-              map: original.map || null,
-              color: 0xffffff,
-              transparent: original.transparent,
-              opacity: original.opacity,
-              side: original.side,
-              alphaTest: original.alphaTest,
-              depthWrite: original.depthWrite,
-              toneMapped: false
-            });
+              const unlit =
+                new THREE.MeshBasicMaterial({
+                  map: original.map || null,
+                  color: 0xffffff,
+                  transparent: original.transparent,
+                  opacity: original.opacity,
+                  side: original.side,
+                  alphaTest: original.alphaTest,
+                  depthWrite: original.depthWrite,
+                  toneMapped: false
+                });
 
-            if (unlit.map) {
-              unlit.map.colorSpace = THREE.SRGBColorSpace;
+              if (unlit.map) {
+                unlit.map.colorSpace =
+                  THREE.SRGBColorSpace;
+              }
+
+              object.material = unlit;
             }
-
-            object.material = unlit;
-          }
-        });
-      })
+          });
+        }
+      )
     );
 
     ready = true;
@@ -615,19 +828,27 @@
 
     if (requested) start();
 
-    console.log('[CTA GLB] V10 assets loaded');
+    console.log(
+      '[CTA GLB] V10 assets loaded'
+    );
 
   } catch (e) {
-    console.error('[CTA GLB] Asset load failed', e);
+    console.error(
+      '[CTA GLB] Asset load failed',
+      e
+    );
     return;
   }
 
-  // V10 animation and floating render loop
+  // Animation and rendering
   function animate(now) {
     requestAnimationFrame(animate);
 
     const dt = lastTime
-      ? Math.min((now - lastTime) / 1000, 0.05)
+      ? Math.min(
+          (now - lastTime) / 1000,
+          0.05
+        )
       : 0;
 
     lastTime = now;
@@ -652,7 +873,10 @@
 
     let i = 0;
 
-    for (const entry of Object.values(data.cards)) {
+    for (
+      const entry
+      of Object.values(data.cards)
+    ) {
       const p = fromBlender(
         entry.samples.at(-1).position
       );
@@ -661,15 +885,24 @@
       const phase = i * 2.39996;
 
       lamp.position.set(
-        p.x + 0.75 * Math.cos(lightTime * 0.43 + phase),
-        p.y + 2.5 + 0.45 * Math.sin(lightTime * 0.37 + phase),
-        p.z + 0.75 * Math.sin(lightTime * 0.51 + phase)
+        p.x + 0.75 * Math.cos(
+          lightTime * 0.43 + phase
+        ),
+        p.y + 2.5 + 0.45 * Math.sin(
+          lightTime * 0.37 + phase
+        ),
+        p.z + 0.75 * Math.sin(
+          lightTime * 0.51 + phase
+        )
       );
 
-      lamp.intensity = 90 * 0.48 * (
-        0.90 +
-        0.10 * Math.sin(lightTime * 0.78 + phase)
-      );
+      lamp.intensity =
+        90 * 0.48 * (
+          0.90 +
+          0.10 * Math.sin(
+            lightTime * 0.78 + phase
+          )
+        );
 
       i++;
     }
@@ -683,12 +916,14 @@
     if (playing) {
       elapsed += dt;
 
-      const f = START_FRAME + elapsed * data.fps;
+      const f =
+        START_FRAME + elapsed * data.fps;
 
       if (f < END_FRAME) {
         setFrame(f);
       } else {
         setFrame(END_FRAME);
+
         playing = false;
         settled = true;
         floatElapsed = 0;
@@ -697,19 +932,26 @@
     } else if (settled) {
       floatElapsed += dt;
 
-      const fade = 1 - Math.exp(-floatElapsed * 1.7);
+      const fade =
+        1 - Math.exp(-floatElapsed * 1.7);
 
       let index = 0;
 
-      for (const [name, entry] of Object.entries(data.cards)) {
+      for (
+        const [name, entry]
+        of Object.entries(data.cards)
+      ) {
         const group = cardObjects[name];
         const rest = entry.samples.at(-1);
         const reference = entry.float_reference;
 
         applyTransform(group, rest);
 
-        const baseQ = qFromBlender(rest.quaternion);
-        const targetQ = qFromBlender(reference.quaternion);
+        const baseQ =
+          qFromBlender(rest.quaternion);
+
+        const targetQ =
+          qFromBlender(reference.quaternion);
 
         const delta = baseQ.clone()
           .invert()
@@ -719,46 +961,59 @@
 
         const amplitude =
           0.5 +
-          0.5 * Math.sin(floatElapsed * 0.55 + phase);
+          0.5 * Math.sin(
+            floatElapsed * 0.55 + phase
+          );
 
         const s = fade;
 
-        const qOffset = new THREE.Quaternion()
-          .identity()
-          .slerp(
-            delta,
-            Math.min(1, s * amplitude * 0.85)
-          );
+        const qOffset =
+          new THREE.Quaternion()
+            .identity()
+            .slerp(
+              delta,
+              Math.min(
+                1,
+                s * amplitude * 0.85
+              )
+            );
 
         group.quaternion.multiply(qOffset);
 
         group.position.x +=
-          Math.sin(floatElapsed * 0.72 + phase) *
-          0.025 * s;
+          Math.sin(
+            floatElapsed * 0.72 + phase
+          ) * 0.025 * s;
 
         group.position.y +=
           Math.sin(
-            floatElapsed * 0.85 + phase * 0.8
+            floatElapsed * 0.85 +
+            phase * 0.8
           ) * 0.035 * s;
 
         group.position.z +=
-          Math.cos(floatElapsed * 0.65 + phase) *
-          0.025 * s;
+          Math.cos(
+            floatElapsed * 0.65 + phase
+          ) * 0.025 * s;
 
-        // Apply V10 mouse rotation over the floating pose
-        const interaction = dragRotations.get(name);
+        const interaction =
+          dragRotations.get(name);
 
         if (interaction) {
           if (!interaction.dragging) {
             interaction.target.slerp(
               identityQuat,
-              1 - Math.exp(-dt * RETURN_SPEED)
+              1 - Math.exp(
+                -dt * RETURN_SPEED
+              )
             );
           }
 
           interaction.current.slerp(
             interaction.target,
-            1 - Math.exp(-dt * DRAG_SMOOTHING)
+            1 - Math.exp(
+              -dt * DRAG_SMOOTHING
+            )
           );
 
           group.quaternion.premultiply(
@@ -767,8 +1022,12 @@
 
           if (
             !interaction.dragging &&
-            interaction.current.angleTo(identityQuat) < 0.001 &&
-            interaction.target.angleTo(identityQuat) < 0.001
+            interaction.current.angleTo(
+              identityQuat
+            ) < 0.001 &&
+            interaction.target.angleTo(
+              identityQuat
+            ) < 0.001
           ) {
             dragRotations.delete(name);
           }
@@ -778,12 +1037,12 @@
       }
     }
 
-    renderer.render(scene, camera);
+    renderComposited();
   }
 
   requestAnimationFrame(animate);
 
   console.log(
-    '[CTA GLB] V10 Webflow controller initialized'
+    '[CTA GLB] V10 two-pass Webflow controller initialized'
   );
 })();
