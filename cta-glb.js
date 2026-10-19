@@ -199,6 +199,56 @@ section.addEventListener("cta:coin-start", () => {
   // V7 assets
   // -----------------------------------------------
 
+  
+  // V6 procedural orange glow — restoration test
+  const glowMaterial = new THREE.ShaderMaterial({
+    transparent: true,
+    depthWrite: false,
+    side: THREE.DoubleSide,
+    uniforms: {
+      uTime: { value: 0 },
+      uMotion: { value: 1 }
+    },
+    vertexShader: `
+      varying vec2 vUv;
+      void main() {
+        vUv = uv;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.);
+      }
+    `,
+    fragmentShader: `
+      varying vec2 vUv;
+      uniform float uTime;
+      uniform float uMotion;
+
+      void main() {
+        vec2 p = vUv - .5;
+        float t = uTime * uMotion;
+        float r = length(p * vec2(1., 1.2));
+        float a = atan(p.y, p.x);
+        float waves = sin(a * 12. + t * .35 + sin(a * 7. - t * .22) * .8) * .5 + .5;
+        float hot = exp(-r * r * 15.) * (.24 + .18 * waves);
+        float broad = exp(-dot(
+          p - vec2(.12 * sin(t * .18), .08 * cos(t * .13)),
+          p - vec2(.12 * sin(t * .18), .08 * cos(t * .13))
+        ) * 4.) * .11;
+
+        vec3 col = vec3(1., .27, .035) * (hot + broad);
+        gl_FragColor = vec4(col, clamp((hot + broad) * 1.7, 0., .7));
+      }
+    `
+  });
+
+  const glow = new THREE.Mesh(
+    new THREE.PlaneGeometry(12, 9),
+    glowMaterial
+  );
+
+  glow.rotation.x = -Math.PI / 2;
+  glow.position.y = -1.3;
+  glow.renderOrder = -1;
+  scene.add(glow);
+
   const files = {
     Card_bill: "Bill.glb",
     Card_card: "Card.glb",
@@ -513,6 +563,8 @@ section.addEventListener("cta:coin-start", () => {
     sceneTime += dt;
 
     const lightTime = sceneTime * 1.5;
+    glowMaterial.uniforms.uTime.value = lightTime;
+glowMaterial.uniforms.uMotion.value = 1;
 
     warm.intensity = 90 * (
       1 +
