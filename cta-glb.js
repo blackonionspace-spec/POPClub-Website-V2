@@ -335,9 +335,9 @@
     0, 0, 0, 512
   );
 
-  gradient.addColorStop(0, '#180702');
-  gradient.addColorStop(0.5, '#341004');
-  gradient.addColorStop(1, '#110501');
+  gradient.addColorStop(0, '#260602');
+gradient.addColorStop(0.5, '#541305');
+gradient.addColorStop(1, '#200401');
 
   ec.fillStyle = gradient;
   ec.fillRect(0, 0, 1024, 512);
