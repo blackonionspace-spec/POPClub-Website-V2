@@ -1,77 +1,103 @@
 
-/*
- * POPClub V2 — CTA GLB Layer
- * Adapted from Six-Card Viewer V7
- *
- * Assets: Six GLBs + animation.json
- * Trigger: cta:coin-complete
- * Animation: Blender frames 25–65
- * Reset: CTA exits viewport + 20vh
- */
-
+/* POPClub V2 — CTA GLB V10 Webflow integration */
 (async () => {
-  "use strict";
+  'use strict';
 
-  const HOST = ".cta_glb_layer";
-  const SECTION = ".section_cta";
-
-  const BASE =
-    "https://cdn.jsdelivr.net/gh/blackonionspace-spec/POPClub-Website-V2@18a86d5298fe95b24680480ab031b5891efff713/cta-3d/";
-
-  const section = document.querySelector(SECTION);
-  const host = document.querySelector(HOST);
+  const section = document.querySelector('.section_cta');
+  const host = document.querySelector('.cta_glb_layer');
 
   if (!section || !host) {
-    console.warn("[CTA GLB] Section or layer missing.");
+    console.warn('[CTA GLB] Missing CTA section/layer');
     return;
   }
 
-  if (host.dataset.ctaGlbInitialized === "true") return;
-  host.dataset.ctaGlbInitialized = "true";
+  if (host.dataset.ctaGlbInitialized === 'true') return;
+  host.dataset.ctaGlbInitialized = 'true';
+
+  const BASE =
+    'https://cdn.jsdelivr.net/gh/blackonionspace-spec/POPClub-Website-V2@18a86d5298fe95b24680480ab031b5891efff713/cta-3d/';
+
+  const START_DELAY = 1.42;
+  const RESET_OVERSHOOT = 0.2;
+  const START_FRAME = 25;
+  const END_FRAME = 65;
+
+  const DRAG_RADIANS_PER_PIXEL = 0.010;
+  const RETURN_SPEED = 3.2;
+  const DRAG_SMOOTHING = 19;
+
+  const FILES = {
+    Card_bill: 'Bill.glb',
+    Card_card: 'Card.glb',
+    Card_coin: 'Coin.glb',
+    Card_energy: 'Energy.glb',
+    Card_npci: 'NPCI.glb',
+    Card_qr: 'QR.glb'
+  };
 
   let requested = false;
   let ready = false;
   let playing = false;
   let settled = false;
-
   let elapsed = 0;
   let floatElapsed = 0;
   let sceneTime = 0;
   let lastTime = 0;
+  let startTimer = null;
+  let generation = 0;
 
-  const FPS_START = 25;
-  const FPS_END = 65;
-  const RESET_OVERSHOOT = 0.2;
+  const resetBoundaryPassed = () => {
+    const r = section.getBoundingClientRect();
+    const h = innerHeight;
 
-  const GLB_START_TIME = 1.42; // Seconds after coin starts
+    return (
+      r.bottom < -h * RESET_OVERSHOOT ||
+      r.top > h * (1 + RESET_OVERSHOOT)
+    );
+  };
 
-section.addEventListener("cta:coin-start", () => {
-  gsap.delayedCall(GLB_START_TIME, () => {
-    requested = true;
-    if (ready) start();
+  function cancelStartTimer() {
+    if (startTimer) {
+      startTimer.kill();
+      startTimer = null;
+    }
+  }
+
+  section.addEventListener('cta:coin-start', () => {
+    cancelStartTimer();
+
+    const token = ++generation;
+
+    if (!window.gsap) {
+      console.error('[CTA GLB] GSAP missing');
+      return;
+    }
+
+    startTimer = gsap.delayedCall(START_DELAY, () => {
+      startTimer = null;
+
+      if (token !== generation || resetBoundaryPassed()) return;
+
+      requested = true;
+
+      if (ready) start();
+    });
   });
-});
 
-  // -----------------------------------------------
-  // Import Three.js
-  // -----------------------------------------------
-
+  // Three.js imports
   let THREE, GLTFLoader;
 
   try {
     [THREE, { GLTFLoader }] = await Promise.all([
-      import("three"),
-      import("three/addons/loaders/GLTFLoader.js")
+      import('three'),
+      import('three/addons/loaders/GLTFLoader.js')
     ]);
-  } catch (error) {
-    console.error("[CTA GLB] Three.js import failed", error);
+  } catch (e) {
+    console.error('[CTA GLB] Three.js import failed', e);
     return;
   }
 
-  // -----------------------------------------------
-  // Scene and renderer
-  // -----------------------------------------------
-
+  // Scene and transparent renderer
   const scene = new THREE.Scene();
 
   const renderer = new THREE.WebGLRenderer({
@@ -79,39 +105,34 @@ section.addEventListener("cta:coin-start", () => {
     alpha: true
   });
 
-  renderer.setPixelRatio(
-    Math.min(window.devicePixelRatio || 1, 2)
-  );
-
+  renderer.setPixelRatio(Math.min(devicePixelRatio || 1, 2));
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = 1.3;
   renderer.setClearColor(0x000000, 0);
 
   renderer.domElement.style.cssText = [
-    "position:absolute",
-    "inset:0",
-    "width:100%",
-    "height:100%",
-    "display:block",
-    "pointer-events:none"
-  ].join(";");
+    'position:absolute',
+    'inset:0',
+    'width:100%',
+    'height:100%',
+    'display:block',
+    'pointer-events:auto',
+    'touch-action:none',
+    'visibility:hidden',
+    'cursor:default'
+  ].join(';');
 
   host.appendChild(renderer.domElement);
-  host.style.pointerEvents = "none";
+  host.style.pointerEvents = 'auto';
 
-  // -----------------------------------------------
-  // V7 camera
-  // -----------------------------------------------
-
+  // Approved V7 camera
   const axis = new THREE.Quaternion().setFromAxisAngle(
     new THREE.Vector3(1, 0, 0),
     -Math.PI / 2
   );
 
   const axisInverse = axis.clone().invert();
-
-  const focalLength = 85;
 
   const camera = new THREE.PerspectiveCamera(
     12, 16 / 9, 0.1, 1000
@@ -128,152 +149,119 @@ section.addEventListener("cta:coin-start", () => {
   function resize() {
     const w = Math.max(1, host.clientWidth);
     const h = Math.max(1, host.clientHeight);
-
-    renderer.setSize(w, h, false);
-
-    const baseVFov = 2 * Math.atan(
-      36 / (2 * focalLength * (16 / 9))
-    );
-
     const ratio = w / h;
+
+    const originalVFov =
+      2 * Math.atan(36 / (2 * 85 * (16 / 9)));
 
     const vfov = ratio < 16 / 9
       ? 2 * Math.atan(
-          Math.tan(baseVFov / 2) * (16 / 9) / ratio
+          Math.tan(originalVFov / 2) * (16 / 9) / ratio
         )
-      : baseVFov;
+      : originalVFov;
+
+    renderer.setSize(w, h, false);
 
     camera.aspect = ratio;
     camera.fov = THREE.MathUtils.radToDeg(vfov);
     camera.updateProjectionMatrix();
   }
 
-  window.addEventListener("resize", resize);
+  window.addEventListener('resize', resize);
   resize();
 
-  // -----------------------------------------------
-  // V7 lighting
-  // -----------------------------------------------
-
+  // Approved V10 lighting
   scene.add(new THREE.AmbientLight(0xffffff, 1));
 
-  const warm = new THREE.PointLight(
-    0xff651a, 90, 0, 2
-  );
-
+  const warm = new THREE.PointLight(0xff651a, 90, 0, 2);
   warm.position.set(-2, 2, 2);
   scene.add(warm);
 
   const highlightColors = [
-    0xffa45c,
-    0xff752d,
-    0xffc18a,
-    0xff8a40,
-    0xffb46c,
-    0xff7025
+    0xffa45c, 0xff752d, 0xffc18a,
+    0xff8a40, 0xffb46c, 0xff7025
   ];
 
   const cardHighlights = highlightColors.map(color => {
-    const light = new THREE.PointLight(
-      color, 36, 6.5, 2
-    );
-    scene.add(light);
-    return light;
+    const lamp = new THREE.PointLight(color, 36, 6.5, 2);
+    scene.add(lamp);
+    return lamp;
   });
 
-  const fill = new THREE.DirectionalLight(
-    0xffffff, 1
-  );
-
+  const fill = new THREE.DirectionalLight(0xffffff, 1);
   fill.position.set(3, 4, 5);
   scene.add(fill);
 
-  const rim = new THREE.DirectionalLight(
-    0xff9d56, 5
-  );
-
+  const rim = new THREE.DirectionalLight(0xff9d56, 5);
   rim.position.set(-3, -2, -4);
   scene.add(rim);
 
-  // -----------------------------------------------
-  // V7 assets
-  // -----------------------------------------------
+  // V10 camera-invisible orange reflection environment
+  const envCanvas = document.createElement('canvas');
+  envCanvas.width = 1024;
+  envCanvas.height = 512;
 
-  
-  // V6 procedural orange glow — restoration test
-  const glowMaterial = new THREE.ShaderMaterial({
-    transparent: true,
-    depthWrite: false,
-    side: THREE.DoubleSide,
-    uniforms: {
-      uTime: { value: 0 },
-      uMotion: { value: 1 }
-    },
-    vertexShader: `
-      varying vec2 vUv;
-      void main() {
-        vUv = uv;
-        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.);
-      }
-    `,
-    fragmentShader: `
-      varying vec2 vUv;
-      uniform float uTime;
-      uniform float uMotion;
+  const ec = envCanvas.getContext('2d');
+  const gradient = ec.createLinearGradient(0, 0, 0, 512);
 
-      void main() {
-        vec2 p = vUv - .5;
-        float t = uTime * uMotion;
-        float r = length(p * vec2(1., 1.2));
-        float a = atan(p.y, p.x);
-        float waves = sin(a * 12. + t * .35 + sin(a * 7. - t * .22) * .8) * .5 + .5;
-        float hot = exp(-r * r * 15.) * (.24 + .18 * waves);
-        float broad = exp(-dot(
-          p - vec2(.12 * sin(t * .18), .08 * cos(t * .13)),
-          p - vec2(.12 * sin(t * .18), .08 * cos(t * .13))
-        ) * 4.) * .11;
+  gradient.addColorStop(0, '#180702');
+  gradient.addColorStop(0.5, '#341004');
+  gradient.addColorStop(1, '#110501');
 
-        vec3 col = vec3(1., .27, .035) * (hot + broad);
-        gl_FragColor = vec4(col, clamp((hot + broad) * 1.7, 0., .7));
-      }
-    `
-  });
+  ec.fillStyle = gradient;
+  ec.fillRect(0, 0, 1024, 512);
 
-  const glow = new THREE.Mesh(
-    new THREE.PlaneGeometry(12, 9),
-    glowMaterial
-  );
+  for (let i = 0; i < 26; i++) {
+    const x = (i * 197.7 + 87) % 1024;
+    const width = 12 + (i % 5) * 13;
 
-  glow.rotation.x = -Math.PI / 2;
-  glow.position.y = -1.3;
-  glow.renderOrder = -1;
-  scene.add(glow);
+    const g = ec.createLinearGradient(
+      x - width, 0, x + width, 0
+    );
 
-  const files = {
-    Card_bill: "Bill.glb",
-    Card_card: "Card.glb",
-    Card_coin: "Coin.glb",
-    Card_energy: "Energy.glb",
-    Card_npci: "NPCI.glb",
-    Card_qr: "QR.glb"
-  };
+    g.addColorStop(0, 'rgba(255,75,8,0)');
+    g.addColorStop(
+      0.5,
+      i % 3 === 0
+        ? 'rgba(255,190,110,.9)'
+        : 'rgba(255,90,20,.7)'
+    );
+    g.addColorStop(1, 'rgba(255,75,8,0)');
 
-  const cardObjects = {};
-  let data;
+    ec.fillStyle = g;
 
-  function fromBlender(p) {
-    return new THREE.Vector3(
-      p[0], p[2], -p[1]
+    ec.fillRect(
+      x - width,
+      80 + (i % 4) * 24,
+      width * 2,
+      340 - (i % 4) * 30
     );
   }
 
-  function qFromBlender(q) {
-    const raw = new THREE.Quaternion(
-      q[1], q[2], q[3], q[0]
-    );
+  const envTexture = new THREE.CanvasTexture(envCanvas);
 
+  envTexture.mapping = THREE.EquirectangularReflectionMapping;
+  envTexture.colorSpace = THREE.SRGBColorSpace;
+
+  scene.environment = envTexture;
+  scene.environmentIntensity = 0.65;
+
+  // Models and Blender transforms
+  const loader = new GLTFLoader();
+  const cardObjects = {};
+  const glassMaterials = [];
+
+  let data;
+
+  function fromBlender(p) {
+    return new THREE.Vector3(p[0], p[2], -p[1]);
+  }
+
+  function qFromBlender(q) {
     return axis.clone()
-      .multiply(raw)
+      .multiply(
+        new THREE.Quaternion(q[1], q[2], q[3], q[0])
+      )
       .multiply(axisInverse)
       .normalize();
   }
@@ -283,21 +271,12 @@ section.addEventListener("cta:coin-start", () => {
       (f - 25) / 40, 0, 1
     );
 
-    return 1 + 0.5 * (
-      t * t * (3 - 2 * t)
-    );
+    return 1 + 0.5 * (t * t * (3 - 2 * t));
   }
 
-  function applyTransform(
-    group, s, multiplier = 1.5
-  ) {
-    group.position.copy(
-      fromBlender(s.position)
-    );
-
-    group.quaternion.copy(
-      qFromBlender(s.quaternion)
-    );
+  function applyTransform(group, s, multiplier = 1.5) {
+    group.position.copy(fromBlender(s.position));
+    group.quaternion.copy(qFromBlender(s.quaternion));
 
     group.scale.set(
       s.scale[0] * multiplier,
@@ -341,24 +320,17 @@ section.addEventListener("cta:coin-start", () => {
           v, b.position[j], t
         )
       ),
-
       scale: a.scale.map(
         (v, j) => THREE.MathUtils.lerp(
           v, b.scale[j], t
         )
       ),
-
-      quaternion: [
-        q1.w, q1.x, q1.y, q1.z
-      ]
+      quaternion: [q1.w, q1.x, q1.y, q1.z]
     };
   }
 
   function setFrame(f) {
-    for (
-      const [name, entry]
-      of Object.entries(data.cards)
-    ) {
+    for (const [name, entry] of Object.entries(data.cards)) {
       applyTransform(
         cardObjects[name],
         sampleAt(entry.samples, f),
@@ -367,22 +339,172 @@ section.addEventListener("cta:coin-start", () => {
     }
   }
 
-  // -----------------------------------------------
-  // Animation reset and start
-  // -----------------------------------------------
+  // V10 individual-card mouse interaction
+  const raycaster = new THREE.Raycaster();
+  const pointerNDC = new THREE.Vector2();
+  const dragRotations = new Map();
+  const identityQuat = new THREE.Quaternion();
 
+  const cameraRight = new THREE.Vector3(1, 0, 0)
+    .applyQuaternion(camera.quaternion)
+    .normalize();
+
+  const cameraUp = new THREE.Vector3(0, 1, 0)
+    .applyQuaternion(camera.quaternion)
+    .normalize();
+
+  let drag = null;
+
+  function pickCard(event) {
+    const b = renderer.domElement.getBoundingClientRect();
+
+    if (!b.width || !b.height) return null;
+
+    pointerNDC.set(
+      ((event.clientX - b.left) / b.width) * 2 - 1,
+      -((event.clientY - b.top) / b.height) * 2 + 1
+    );
+
+    raycaster.setFromCamera(pointerNDC, camera);
+
+    const hits = raycaster.intersectObjects(
+      Object.values(cardObjects),
+      true
+    );
+
+    for (const hit of hits) {
+      let node = hit.object;
+
+      while (node && node.parent !== scene) {
+        node = node.parent;
+      }
+
+      if (node && cardObjects[node.name] === node) {
+        return node.name;
+      }
+    }
+
+    return null;
+  }
+
+  function releaseDrag(event) {
+    if (
+      !drag ||
+      (event && event.pointerId !== drag.pointerId)
+    ) return;
+
+    const state = dragRotations.get(drag.name);
+
+    if (state) state.dragging = false;
+
+    const id = drag.pointerId;
+    drag = null;
+
+    if (renderer.domElement.hasPointerCapture(id)) {
+      renderer.domElement.releasePointerCapture(id);
+    }
+
+    renderer.domElement.style.cursor = 'default';
+  }
+
+  function resetInteractions() {
+    releaseDrag();
+    dragRotations.clear();
+    renderer.domElement.style.cursor = 'default';
+  }
+
+  renderer.domElement.addEventListener('pointerdown', event => {
+    if (!ready || !settled || event.button !== 0) return;
+
+    const name = pickCard(event);
+    if (!name) return;
+
+    event.preventDefault();
+
+    drag = {
+      name,
+      pointerId: event.pointerId,
+      x: event.clientX,
+      y: event.clientY
+    };
+
+    if (!dragRotations.has(name)) {
+      dragRotations.set(name, {
+        target: new THREE.Quaternion(),
+        current: new THREE.Quaternion(),
+        dragging: false
+      });
+    }
+
+    dragRotations.get(name).dragging = true;
+
+    renderer.domElement.setPointerCapture(event.pointerId);
+    renderer.domElement.style.cursor = 'grabbing';
+  });
+
+  renderer.domElement.addEventListener('pointermove', event => {
+    if (drag && drag.pointerId === event.pointerId) {
+      const dx = event.clientX - drag.x;
+      const dy = event.clientY - drag.y;
+
+      drag.x = event.clientX;
+      drag.y = event.clientY;
+
+      const state = dragRotations.get(drag.name);
+
+      const horizontal = new THREE.Quaternion()
+        .setFromAxisAngle(
+          cameraUp,
+          dx * DRAG_RADIANS_PER_PIXEL
+        );
+
+      const vertical = new THREE.Quaternion()
+        .setFromAxisAngle(
+          cameraRight,
+          dy * DRAG_RADIANS_PER_PIXEL
+        );
+
+      state.target
+        .premultiply(horizontal)
+        .premultiply(vertical)
+        .normalize();
+
+    } else if (ready && settled) {
+      renderer.domElement.style.cursor =
+        pickCard(event) ? 'grab' : 'default';
+    }
+  });
+
+  renderer.domElement.addEventListener(
+    'pointerup', releaseDrag
+  );
+
+  renderer.domElement.addEventListener(
+    'pointercancel', releaseDrag
+  );
+
+  renderer.domElement.addEventListener(
+    'lostpointercapture', releaseDrag
+  );
+
+  window.addEventListener('blur', () => releaseDrag());
+
+  // Playback and reset
   function reset() {
+    generation++;
+    cancelStartTimer();
+
     requested = false;
     playing = false;
     settled = false;
-
     elapsed = 0;
     floatElapsed = 0;
 
-    if (ready) setFrame(FPS_START);
+    resetInteractions();
 
-    renderer.domElement.style.visibility =
-      "hidden";
+    renderer.domElement.style.visibility = 'hidden';
+
+    if (ready) setFrame(START_FRAME);
   }
 
   function start() {
@@ -390,181 +512,131 @@ section.addEventListener("cta:coin-start", () => {
       !ready ||
       !requested ||
       playing ||
-      settled
+      settled ||
+      resetBoundaryPassed()
     ) return;
+
+    resetInteractions();
 
     playing = true;
     elapsed = 0;
     floatElapsed = 0;
 
-    setFrame(FPS_START);
+    setFrame(START_FRAME);
 
-    renderer.domElement.style.visibility =
-      "visible";
+    renderer.domElement.style.visibility = 'visible';
 
-    console.log(
-      "[CTA GLB] V7 explosion started."
-    );
+    console.log('[CTA GLB] V10 animation started');
   }
 
-  renderer.domElement.style.visibility =
-    "hidden";
-
   function checkReset() {
-    const rect =
-      section.getBoundingClientRect();
-
-    const extra =
-      window.innerHeight * RESET_OVERSHOOT;
-
     if (
-      rect.bottom < -extra ||
-      rect.top > window.innerHeight + extra
+      resetBoundaryPassed() &&
+      (requested || playing || settled || startTimer)
     ) {
-      if (
-        requested ||
-        playing ||
-        settled
-      ) reset();
+      reset();
     }
   }
 
-  window.addEventListener(
-    "scroll",
-    checkReset,
-    { passive: true }
-  );
+  window.addEventListener('scroll', checkReset, {
+    passive: true
+  });
 
-  window.addEventListener(
-    "resize",
-    checkReset
-  );
+  window.addEventListener('resize', checkReset);
 
-  // -----------------------------------------------
-  // Load animation.json and six GLBs
-  // -----------------------------------------------
-
+  // Load the existing GLBs and animation.json
   try {
-    const response = await fetch(
-      BASE + "animation.json"
-    );
+    const response = await fetch(BASE + 'animation.json');
 
     if (!response.ok) {
       throw new Error(
-        "animation.json HTTP " + response.status
+        'animation.json HTTP ' + response.status
       );
     }
 
     data = await response.json();
 
-    const loader = new GLTFLoader();
-
     await Promise.all(
-      Object.entries(files).map(
-        async ([name, file]) => {
-          const gltf = await loader.loadAsync(
-            BASE + file
-          );
+      Object.entries(FILES).map(async ([name, file]) => {
+        const gltf = await loader.loadAsync(BASE + file);
 
-          const group = new THREE.Group();
+        const group = new THREE.Group();
 
-          group.name = name;
-          group.add(gltf.scene);
-          scene.add(group);
+        group.name = name;
+        group.add(gltf.scene);
+        scene.add(group);
 
-          cardObjects[name] = group;
+        cardObjects[name] = group;
 
-          gltf.scene.traverse(object => {
-            if (!object.isMesh) return;
+        gltf.scene.traverse(object => {
+          if (!object.isMesh) return;
 
-            const meshName =
-              object.name.toLowerCase();
+          const meshName = object.name.toLowerCase();
 
-            if (meshName.includes("glass")) {
-              const material = object.material;
+          if (meshName.includes('glass')) {
+            const m = object.material;
 
-              material.ior = 1.5;
-              material.thickness = 0.15;
-              material.roughness = 0.30;
-              material.specularIntensity = 0.65;
-              material.envMapIntensity = 0.65;
-              material.needsUpdate = true;
+            m.ior = 1.5;
+            m.thickness = 0.15;
+            m.roughness = 0.30;
+            m.specularIntensity = 0.65;
+            m.envMapIntensity = 0.65;
+            m.needsUpdate = true;
 
-            } else if (
-              meshName.includes("artwork")
-            ) {
-              const original = object.material;
+            glassMaterials.push(m);
 
-              const unlit =
-                new THREE.MeshBasicMaterial({
-                  map: original.map || null,
-                  color: 0xffffff,
-                  transparent: original.transparent,
-                  opacity: original.opacity,
-                  side: original.side,
-                  alphaTest: original.alphaTest,
-                  depthWrite: original.depthWrite,
-                  toneMapped: false
-                });
+          } else if (meshName.includes('artwork')) {
+            const original = object.material;
 
-              if (unlit.map) {
-                unlit.map.colorSpace =
-                  THREE.SRGBColorSpace;
-              }
+            const unlit = new THREE.MeshBasicMaterial({
+              map: original.map || null,
+              color: 0xffffff,
+              transparent: original.transparent,
+              opacity: original.opacity,
+              side: original.side,
+              alphaTest: original.alphaTest,
+              depthWrite: original.depthWrite,
+              toneMapped: false
+            });
 
-              object.material = unlit;
+            if (unlit.map) {
+              unlit.map.colorSpace = THREE.SRGBColorSpace;
             }
-          });
-        }
-      )
+
+            object.material = unlit;
+          }
+        });
+      })
     );
 
     ready = true;
-    setFrame(FPS_START);
-
-    console.log(
-      "[CTA GLB] All six V7 models loaded."
-    );
-
+    setFrame(START_FRAME);
     checkReset();
 
     if (requested) start();
 
-  } catch (error) {
-    console.error(
-      "[CTA GLB] Failed to load V7 assets",
-      error
-    );
+    console.log('[CTA GLB] V10 assets loaded');
+
+  } catch (e) {
+    console.error('[CTA GLB] Asset load failed', e);
     return;
   }
 
-  // -----------------------------------------------
-  // Render loop
-  // -----------------------------------------------
-
+  // V10 animation and floating render loop
   function animate(now) {
     requestAnimationFrame(animate);
 
     const dt = lastTime
-      ? Math.min(
-          (now - lastTime) / 1000,
-          0.05
-        )
+      ? Math.min((now - lastTime) / 1000, 0.05)
       : 0;
 
     lastTime = now;
 
-    if (
-      !requested &&
-      !playing &&
-      !settled
-    ) return;
+    if (!playing && !settled) return;
 
     sceneTime += dt;
 
     const lightTime = sceneTime * 1.5;
-    glowMaterial.uniforms.uTime.value = lightTime;
-glowMaterial.uniforms.uMotion.value = 1;
 
     warm.intensity = 90 * (
       1 +
@@ -580,10 +652,7 @@ glowMaterial.uniforms.uMotion.value = 1;
 
     let i = 0;
 
-    for (
-      const entry
-      of Object.values(data.cards)
-    ) {
+    for (const entry of Object.values(data.cards)) {
       const p = fromBlender(
         entry.samples.at(-1).position
       );
@@ -592,124 +661,118 @@ glowMaterial.uniforms.uMotion.value = 1;
       const phase = i * 2.39996;
 
       lamp.position.set(
-        p.x + 0.75 * Math.cos(
-          lightTime * 0.43 + phase
-        ),
-        p.y + 2.5 + 0.45 * Math.sin(
-          lightTime * 0.37 + phase
-        ),
-        p.z + 0.75 * Math.sin(
-          lightTime * 0.51 + phase
-        )
+        p.x + 0.75 * Math.cos(lightTime * 0.43 + phase),
+        p.y + 2.5 + 0.45 * Math.sin(lightTime * 0.37 + phase),
+        p.z + 0.75 * Math.sin(lightTime * 0.51 + phase)
       );
 
-      lamp.intensity =
-        90 * 0.48 * (
-          0.90 +
-          0.10 * Math.sin(
-            lightTime * 0.78 + phase
-          )
-        );
+      lamp.intensity = 90 * 0.48 * (
+        0.90 +
+        0.10 * Math.sin(lightTime * 0.78 + phase)
+      );
 
       i++;
     }
 
-    // Play Blender animation frames 25–65
+    for (const m of glassMaterials) {
+      m.roughness = 0.30;
+      m.thickness = 0.15;
+      m.specularIntensity = 0.65;
+    }
 
     if (playing) {
       elapsed += dt;
 
-      const frame =
-        FPS_START + elapsed * data.fps;
+      const f = START_FRAME + elapsed * data.fps;
 
-      if (frame < FPS_END) {
-        setFrame(frame);
+      if (f < END_FRAME) {
+        setFrame(f);
       } else {
-        setFrame(FPS_END);
-
+        setFrame(END_FRAME);
         playing = false;
         settled = true;
         floatElapsed = 0;
       }
 
     } else if (settled) {
-
-      // V7 perpetual floating
-
       floatElapsed += dt;
 
-      const strength = 1;
-
-      const fade =
-        1 - Math.exp(
-          -floatElapsed * 1.7
-        );
+      const fade = 1 - Math.exp(-floatElapsed * 1.7);
 
       let index = 0;
 
-      for (
-        const [name, entry]
-        of Object.entries(data.cards)
-      ) {
+      for (const [name, entry] of Object.entries(data.cards)) {
         const group = cardObjects[name];
-
-        const rest =
-          entry.samples.at(-1);
-
-        const reference =
-          entry.float_reference;
+        const rest = entry.samples.at(-1);
+        const reference = entry.float_reference;
 
         applyTransform(group, rest);
 
-        const baseQ =
-          qFromBlender(rest.quaternion);
+        const baseQ = qFromBlender(rest.quaternion);
+        const targetQ = qFromBlender(reference.quaternion);
 
-        const targetQ =
-          qFromBlender(reference.quaternion);
-
-        const delta =
-          baseQ.clone()
-            .invert()
-            .multiply(targetQ);
+        const delta = baseQ.clone()
+          .invert()
+          .multiply(targetQ);
 
         const phase = index * 1.71;
 
         const amplitude =
           0.5 +
-          0.5 * Math.sin(
-            floatElapsed * 0.55 + phase
+          0.5 * Math.sin(floatElapsed * 0.55 + phase);
+
+        const s = fade;
+
+        const qOffset = new THREE.Quaternion()
+          .identity()
+          .slerp(
+            delta,
+            Math.min(1, s * amplitude * 0.85)
           );
-
-        const s = fade * strength;
-
-        const qOffset =
-          new THREE.Quaternion()
-            .identity()
-            .slerp(
-              delta,
-              Math.min(
-                1,
-                s * amplitude * 0.85
-              )
-            );
 
         group.quaternion.multiply(qOffset);
 
         group.position.x +=
-          Math.sin(
-            floatElapsed * 0.72 + phase
-          ) * 0.025 * s;
+          Math.sin(floatElapsed * 0.72 + phase) *
+          0.025 * s;
 
         group.position.y +=
           Math.sin(
-            floatElapsed * 0.85 +
-            phase * 0.8
+            floatElapsed * 0.85 + phase * 0.8
           ) * 0.035 * s;
 
         group.position.z +=
-          Math.cos(
-            floatElapsed * 0.65 + phase
-          ) * 0.025 * s;
+          Math.cos(floatElapsed * 0.65 + phase) *
+          0.025 * s;
+
+        // Apply V10 mouse rotation over the floating pose
+        const interaction = dragRotations.get(name);
+
+        if (interaction) {
+          if (!interaction.dragging) {
+            interaction.target.slerp(
+              identityQuat,
+              1 - Math.exp(-dt * RETURN_SPEED)
+            );
+          }
+
+          interaction.current.slerp(
+            interaction.target,
+            1 - Math.exp(-dt * DRAG_SMOOTHING)
+          );
+
+          group.quaternion.premultiply(
+            interaction.current
+          );
+
+          if (
+            !interaction.dragging &&
+            interaction.current.angleTo(identityQuat) < 0.001 &&
+            interaction.target.angleTo(identityQuat) < 0.001
+          ) {
+            dragRotations.delete(name);
+          }
+        }
 
         index++;
       }
@@ -721,7 +784,6 @@ glowMaterial.uniforms.uMotion.value = 1;
   requestAnimationFrame(animate);
 
   console.log(
-    "[CTA GLB] Webflow V7 initialized."
+    '[CTA GLB] V10 Webflow controller initialized'
   );
-
 })();
