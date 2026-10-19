@@ -109,7 +109,7 @@
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = 1.3;
-  renderer.setClearColor(0x000000, 0);
+  renderer.setClearColor(0x000000, 1);
 
   renderer.domElement.style.cssText = [
     'position:absolute',
