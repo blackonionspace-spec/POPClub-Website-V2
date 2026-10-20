@@ -67,7 +67,7 @@
     let playbackTimer = null;
 
     image.src = urls[0];
-    layer.style.visibility = "hidden";
+    layer.style.visibility = "visible";
 
     function showFrame(index) {
       frameIndex = Math.max(0, Math.min(index, urls.length - 1));
@@ -106,7 +106,7 @@
       played = false;
       playing = false;
       showFrame(0);
-      layer.style.visibility = "hidden";
+      layer.style.visibility = "visible";
     }
 
     function update() {
