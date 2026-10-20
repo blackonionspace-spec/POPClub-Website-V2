@@ -1,0 +1,28 @@
+﻿// POPClub V2 - Brand Partners shutter frames
+window.partnersShutterFrameURLs = [
+  "https://s3.amazonaws.com/webflow-prod-assets/6ac4f76204430eb900a80285/6ad74dda48b60c087b02e510_0001.avif",
+  "https://s3.amazonaws.com/webflow-prod-assets/6ac4f76204430eb900a80285/6ad74ddaf7d362482d0d724d_0002.avif",
+  "https://s3.amazonaws.com/webflow-prod-assets/6ac4f76204430eb900a80285/6ad74dda501eac52cf39a668_0003.avif",
+  "https://s3.amazonaws.com/webflow-prod-assets/6ac4f76204430eb900a80285/6ad74ddad3e28c1bfc8c5f4d_0004.avif",
+  "https://s3.amazonaws.com/webflow-prod-assets/6ac4f76204430eb900a80285/6ad74ddaf6a7fccdd4416907_0005.avif",
+  "https://s3.amazonaws.com/webflow-prod-assets/6ac4f76204430eb900a80285/6ad74df2eb6bfadeeab3f305_0006.avif",
+  "https://s3.amazonaws.com/webflow-prod-assets/6ac4f76204430eb900a80285/6ad74ddac1c9008462c6467d_0007.avif",
+  "https://s3.amazonaws.com/webflow-prod-assets/6ac4f76204430eb900a80285/6ad74dda682d8f7895511d80_0008.avif",
+  "https://s3.amazonaws.com/webflow-prod-assets/6ac4f76204430eb900a80285/6ad74dda27c4d964fb8f42b2_0009.avif",
+  "https://s3.amazonaws.com/webflow-prod-assets/6ac4f76204430eb900a80285/6ad74ddaf6a7fccdd44168ea_0010.avif",
+  "https://s3.amazonaws.com/webflow-prod-assets/6ac4f76204430eb900a80285/6ad74dda4d7ed7d3c83b52fa_0011.avif",
+  "https://s3.amazonaws.com/webflow-prod-assets/6ac4f76204430eb900a80285/6ad74dda9b807d51bfd444cb_0012.avif",
+  "https://s3.amazonaws.com/webflow-prod-assets/6ac4f76204430eb900a80285/6ad74dda3fa0a22ef724c05a_0013.avif",
+  "https://s3.amazonaws.com/webflow-prod-assets/6ac4f76204430eb900a80285/6ad74dda5f25bee0295e748d_0014.avif",
+  "https://s3.amazonaws.com/webflow-prod-assets/6ac4f76204430eb900a80285/6ad74dda501eac52cf39a665_0015.avif",
+  "https://s3.amazonaws.com/webflow-prod-assets/6ac4f76204430eb900a80285/6ad74dda718140180fa4f39e_0016.avif",
+  "https://s3.amazonaws.com/webflow-prod-assets/6ac4f76204430eb900a80285/6ad74dda90e7ec2f76381250_0017.avif",
+  "https://s3.amazonaws.com/webflow-prod-assets/6ac4f76204430eb900a80285/6ad74dda48b60c087b02e4fd_0018.avif",
+  "https://s3.amazonaws.com/webflow-prod-assets/6ac4f76204430eb900a80285/6ad74dda501eac52cf39a65b_0019.avif",
+  "https://s3.amazonaws.com/webflow-prod-assets/6ac4f76204430eb900a80285/6ad74dda1718f085edb15368_0020.avif",
+  "https://s3.amazonaws.com/webflow-prod-assets/6ac4f76204430eb900a80285/6ad74dda5f25bee0295e7490_0021.avif",
+  "https://s3.amazonaws.com/webflow-prod-assets/6ac4f76204430eb900a80285/6ad74ddaa5913e9581591d29_0022.avif",
+  "https://s3.amazonaws.com/webflow-prod-assets/6ac4f76204430eb900a80285/6ad74ddaf6a7fccdd44168dc_0023.avif",
+  "https://s3.amazonaws.com/webflow-prod-assets/6ac4f76204430eb900a80285/6ad74ddacee70907917469ea_0024.avif",
+  "https://s3.amazonaws.com/webflow-prod-assets/6ac4f76204430eb900a80285/6ad74dda92e4f373e1343076_0025.avif"
+];
