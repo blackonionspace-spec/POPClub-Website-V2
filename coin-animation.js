@@ -400,11 +400,24 @@
     // SCROLL-CONTROLLED EXIT
     // =========================================
 
+    // EXPERIMENT: Reserve 2000px of layout space
+// while keeping the full Coin scroll animation.
+
+const coinSection = document.querySelector(".section_coin");
+
+const coinLayoutSpacer = document.createElement("div");
+coinLayoutSpacer.id = "coin-layout-experiment";
+coinLayoutSpacer.style.cssText =
+  "height:2000px;pointer-events:none;";
+
+coinSection.insertAdjacentElement("afterend", coinLayoutSpacer);
+    
     const scrollTrigger = ScrollTrigger.create({
-  trigger: document.querySelector(".section_coin"),
+  trigger: coinSection,
   start: "top top",
   end: `+=${CONFIG.scrollDistance}`,
   pin: true,
+  pinSpacing: false,
   anticipatePin: 1,
   invalidateOnRefresh: true,
 
