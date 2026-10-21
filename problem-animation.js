@@ -238,26 +238,32 @@
        ----------------------------------------- */
 
     function update() {
-      const progress = Math.max(
-        0,
-        Math.min(1, crtTrigger.progress)
-      );
+  const progress = Math.max(
+    0,
+    Math.min(1, crtTrigger.progress)
+  );
 
-      // Complete all 55 frames within the
-      // first 30% of the CRT scroll distance.
-      // Then hold the final frame.
+  // Start frames when Problem is 50% visible.
+  // Continue smoothly after the existing pin begins.
+  const earlyStart = window.innerHeight * 0.5;
 
-      const frameProgress = Math.min(
-        1,
-        progress / CONFIG.frameProgressEnd
-      );
+  const scrollPosition =
+    window.scrollY - (crtTrigger.start - earlyStart);
 
-      const frameIndex = Math.min(
-        urls.length - 1,
-        Math.floor(frameProgress * (urls.length - 1))
-      );
+  const frameDistance =
+    CONFIG.frameProgressEnd * 11300;
 
-      currentFrame = frameIndex;
+  const frameProgress = Math.max(
+    0,
+    Math.min(1, scrollPosition / (frameDistance + earlyStart))
+  );
+
+  const frameIndex = Math.min(
+    urls.length - 1,
+    Math.floor(frameProgress * (urls.length - 1))
+  );
+
+  currentFrame = frameIndex;
 
       // Reveal CRT at frame 30.
       // Hide it again when scrolling backwards
