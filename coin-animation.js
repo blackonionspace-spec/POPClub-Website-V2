@@ -408,7 +408,7 @@ const coinSection = document.querySelector(".section_coin");
 const coinLayoutSpacer = document.createElement("div");
 coinLayoutSpacer.id = "coin-layout-experiment";
 coinLayoutSpacer.style.cssText =
-  "height:2000px;pointer-events:none;";
+  "height:153vh;pointer-events:none;";
 
 coinSection.insertAdjacentElement("afterend", coinLayoutSpacer);
     
