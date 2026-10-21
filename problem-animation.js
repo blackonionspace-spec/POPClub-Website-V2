@@ -245,7 +245,7 @@
 
   // Start frames when Problem is 50% visible.
   // Continue smoothly after the existing pin begins.
-  const earlyStart = window.innerHeight * 0.5;
+  const earlyStart = window.innerHeight * 0.2;
 
   const scrollPosition =
     window.scrollY - (crtTrigger.start - earlyStart);
