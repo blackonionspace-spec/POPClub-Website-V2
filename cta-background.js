@@ -151,7 +151,7 @@
           radius: CONFIG.maskEndRadiusVH,
           feather: CONFIG.maskEndFeatherVH,
           duration: CONFIG.maskEndTime - CONFIG.maskStartTime,
-          ease: "power2.inOut",
+          ease: "power3.out",
           onUpdate: applyRadialMask,
           onComplete: removeRadialMask
         },
