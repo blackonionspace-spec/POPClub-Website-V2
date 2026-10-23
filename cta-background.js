@@ -5,14 +5,16 @@
  * Independent of CTA coin and GLB scripts.
  *
  * Activation: CTA 87% visible
- * Explosion: 1.583 seconds after activation
- * Scale: 0 -> 1.1 -> 1 over 1.5 seconds
+ * Explosion begins: 1.583 seconds after activation
  *
- * Radial mask:
- *   Closed until 1.65 seconds
- *   Expands from center until 2.633 seconds
- *   Radius: 0 -> 120vh
- *   Feather: 0 -> 20vh
+ * Scale animation:
+ *   0 -> 1.1 over 1.05 seconds
+ *   1.1 -> 1 over 0.45 seconds
+ *
+ * Edge feather:
+ *   Soft rectangular edges during expansion
+ *   Feather fades away before scale reaches 1.1
+ *   No expanding radial mask
  *
  * Reset: CTA exits viewport by an additional 20vh
  * Replays on CTA re-entry
@@ -29,11 +31,8 @@
     expandDuration: 1.05,
     settleDuration: 0.45,
 
-    maskStartTime: 1.65,
-    maskEndTime: 2.633,
-
-    maskEndRadiusVH: 120,
-    maskEndFeatherVH: 20
+    featherSizeVH: 20,
+    featherFadeDuration: 0.15
   };
 
   function init() {
@@ -56,34 +55,63 @@
     let active = false;
     let timeline = null;
 
-    const mask = {
-      radius: 0,
-      feather: 0
+    // --------------------------------------------------
+    // Edge feathering
+    // --------------------------------------------------
+
+    const feather = {
+      strength: 1
     };
 
-    // --------------------------------------------------
-    // Radial mask
-    // --------------------------------------------------
+    function applyEdgeFeather() {
+      const strength = Math.max(
+        0,
+        Math.min(1, feather.strength)
+      );
 
-    function applyRadialMask() {
-      const radius = Math.max(0, mask.radius);
-      const feather = Math.max(0, mask.feather);
+      // Completely remove masking once feather reaches zero.
+      if (strength <= 0.001) {
+        background.style.webkitMaskImage = "none";
+        background.style.maskImage = "none";
+        return;
+      }
 
-      const innerRadius = Math.max(0, radius - feather);
+      const featherSize = CONFIG.featherSizeVH * strength;
 
-      const gradient = `radial-gradient(
-        circle at center,
-        black ${innerRadius}vh,
-        transparent ${radius}vh
+      // Each gradient softens one pair of opposite edges.
+      // Intersecting the gradients softens all four edges.
+      const vertical = `linear-gradient(
+        to bottom,
+        transparent 0%,
+        black ${featherSize}vh,
+        black calc(100% - ${featherSize}vh),
+        transparent 100%
       )`;
 
-      background.style.webkitMaskImage = gradient;
-      background.style.maskImage = gradient;
+      const horizontal = `linear-gradient(
+        to right,
+        transparent 0%,
+        black ${featherSize}vh,
+        black calc(100% - ${featherSize}vh),
+        transparent 100%
+      )`;
+
+      background.style.webkitMaskImage =
+        `${vertical}, ${horizontal}`;
+
+      background.style.maskImage =
+        `${vertical}, ${horizontal}`;
+
+      background.style.webkitMaskComposite = "source-in";
+      background.style.maskComposite = "intersect";
     }
 
-    function removeRadialMask() {
+    function removeEdgeFeather() {
       background.style.webkitMaskImage = "none";
       background.style.maskImage = "none";
+
+      background.style.webkitMaskComposite = "";
+      background.style.maskComposite = "";
     }
 
     // --------------------------------------------------
@@ -97,7 +125,7 @@
       }
 
       gsap.killTweensOf(background);
-      gsap.killTweensOf(mask);
+      gsap.killTweensOf(feather);
 
       gsap.set(background, {
         scale: 0,
@@ -106,10 +134,8 @@
         filter: "none"
       });
 
-      mask.radius = 0;
-      mask.feather = 0;
-
-      applyRadialMask();
+      feather.strength = 1;
+      applyEdgeFeather();
     }
 
     // --------------------------------------------------
@@ -144,18 +170,22 @@
         CONFIG.startDelay + CONFIG.expandDuration
       );
 
-      // New radial reveal.
+      // Fade away the edge feather just before 110% scale.
+      const featherFadeStart =
+        CONFIG.startDelay +
+        CONFIG.expandDuration -
+        CONFIG.featherFadeDuration;
+
       timeline.to(
-        mask,
+        feather,
         {
-          radius: CONFIG.maskEndRadiusVH,
-          feather: CONFIG.maskEndFeatherVH,
-          duration: CONFIG.maskEndTime - CONFIG.maskStartTime,
-          ease: "power3.out",
-          onUpdate: applyRadialMask,
-          onComplete: removeRadialMask
+          strength: 0,
+          duration: CONFIG.featherFadeDuration,
+          ease: "power2.inOut",
+          onUpdate: applyEdgeFeather,
+          onComplete: removeEdgeFeather
         },
-        CONFIG.maskStartTime
+        featherFadeStart
       );
     }
 
@@ -173,16 +203,25 @@
           Math.max(rect.top, 0)
       );
 
-      const visibilityRatio = visibleHeight / rect.height;
+      const visibilityRatio =
+        rect.height > 0
+          ? visibleHeight / rect.height
+          : 0;
 
-      if (!active && visibilityRatio >= CONFIG.activationThreshold) {
+      // Activate at the same threshold as CTA coin.
+      if (
+        !active &&
+        visibilityRatio >= CONFIG.activationThreshold
+      ) {
         active = true;
         startBackground();
       }
 
+      // Reset after leaving viewport by another 20vh.
       if (active) {
         const exitedAbove =
-          rect.bottom < -viewportHeight * CONFIG.resetOvershoot;
+          rect.bottom <
+          -viewportHeight * CONFIG.resetOvershoot;
 
         const exitedBelow =
           rect.top >
@@ -195,13 +234,22 @@
       }
     }
 
+    // --------------------------------------------------
+    // Initialize
+    // --------------------------------------------------
+
     resetBackground();
 
-    window.addEventListener("scroll", checkCTAVisibility, {
-      passive: true
-    });
+    window.addEventListener(
+      "scroll",
+      checkCTAVisibility,
+      { passive: true }
+    );
 
-    window.addEventListener("resize", checkCTAVisibility);
+    window.addEventListener(
+      "resize",
+      checkCTAVisibility
+    );
 
     checkCTAVisibility();
   }
