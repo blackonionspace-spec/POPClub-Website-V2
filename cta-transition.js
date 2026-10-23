@@ -4,19 +4,18 @@
  *
  * Independent of coin, GLB, text and background animations.
  *
- * 0–25% CTA visibility:
- *   Fixed 40vh diameter circular opening
+ * CTA entering from POPChop:
+ *   0–25% entry: Fixed 40vh circular opening
+ *   25–100% entry: Circle expands with scrolling
+ *   100% entry: Remaining mask fades over 1.5 seconds
  *
- * 25–100% CTA visibility:
- *   Circular opening expands with natural scrolling
+ * CTA exiting toward next section:
+ *   Mask remains completely open
  *
- * 100% CTA visibility:
- *   Remaining mask fades away over 1.5 seconds
+ * Scrolling backward toward POPChop:
+ *   Radial reveal reverses naturally
  *
- * Backward scrolling:
- *   Scroll-controlled mask returns automatically
- *
- * No pinning, extra scroll distance or Navigator changes.
+ * No pinning or additional scroll distance.
  */
 
 (() => {
@@ -58,7 +57,6 @@
     let fadeTween = null;
     let fullyEntered = false;
     let currentProgress = 0;
-    let lastVisibility = -1;
 
     const clamp = (value, min, max) =>
       Math.max(min, Math.min(max, value));
@@ -75,9 +73,7 @@
         (CONFIG.finalRadiusVH - startRadius) * progress;
 
       const feather = CONFIG.featherVH;
-
       const innerRadius = Math.max(0, radius - feather);
-
       const edgeOpacity = clamp(state.fade, 0, 1);
 
       if (edgeOpacity >= 0.999) {
@@ -126,7 +122,7 @@
     }
 
     // --------------------------------------------------
-    // Scroll progress
+    // Entry-based scroll progress
     // --------------------------------------------------
 
     function update() {
@@ -135,28 +131,18 @@
 
       if (rect.height <= 0 || viewportHeight <= 0) return;
 
-      const visibleHeight = Math.max(
-        0,
-        Math.min(rect.bottom, viewportHeight) -
-          Math.max(rect.top, 0)
-      );
-
-      // Use the smaller of section and viewport heights,
-      // so the transition works with taller sections.
-      const referenceHeight = Math.min(
-        rect.height,
-        viewportHeight
-      );
-
-      const visibility = clamp(
-        visibleHeight / referenceHeight,
+      // 0: CTA top at viewport bottom
+      // 1: CTA top at viewport top
+      // Remains 1 while CTA exits upward.
+      const entryProgress = clamp(
+        (viewportHeight - rect.top) / viewportHeight,
         0,
         1
       );
 
-      // Calculate progress from 25% to 100% visibility.
+      // Circle remains fixed until 25% entry.
       const progress = clamp(
-        (visibility - CONFIG.startVisibility) /
+        (entryProgress - CONFIG.startVisibility) /
           (1 - CONFIG.startVisibility),
         0,
         1
@@ -164,27 +150,22 @@
 
       currentProgress = progress;
 
-      // Only start the fade when the CTA is entering
-      // from below and reaches full visibility.
-      if (visibility >= 0.999 && !fullyEntered) {
-        beginFade();
+      // Start final fade when CTA fully enters.
+      if (entryProgress >= 0.999) {
+        if (!fullyEntered) {
+          beginFade();
+        }
+      } else {
+        // Reverse transition only when returning
+        // toward POPChop.
+        if (fullyEntered) {
+          fullyEntered = false;
+          stopFade();
+          state.fade = 0;
+        }
       }
 
-      // Re-enable the radial mask when scrolling
-      // backward out of the fully visible state.
-      if (visibility < 0.999 && fullyEntered) {
-        fullyEntered = false;
-        stopFade();
-        state.fade = 0;
-      }
-
-      if (
-        Math.abs(visibility - lastVisibility) > 0.0001 ||
-        fadeTween
-      ) {
-        applyMask(currentProgress);
-        lastVisibility = visibility;
-      }
+      applyMask(currentProgress);
     }
 
     // --------------------------------------------------
