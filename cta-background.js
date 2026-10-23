@@ -7,17 +7,18 @@
  * Activation: CTA 87% visible
  * Explosion begins: 1.583 seconds after activation
  *
- * Scale animation:
+ * Scale:
  *   0 -> 1.1 over 1.05 seconds
  *   1.1 -> 1 over 0.45 seconds
  *
  * Edge feather:
- *   Soft rectangular edges during expansion
- *   Feather fades away before scale reaches 1.1
- *   No expanding radial mask
+ *   Fixed 20vh feather during expansion
+ *   Begins fading when scale reaches 1.1
+ *   Fades completely over 2 seconds
  *
- * Reset: CTA exits viewport by an additional 20vh
- * Replays on CTA re-entry
+ * Reset:
+ *   CTA exits viewport by an additional 20vh
+ *   Replays on CTA re-entry
  */
 
 (() => {
@@ -32,7 +33,7 @@
     settleDuration: 0.45,
 
     featherSizeVH: 20,
-    featherFadeDuration: 0.15
+    featherFadeDuration: 2
   };
 
   function init() {
@@ -55,13 +56,21 @@
     let active = false;
     let timeline = null;
 
+    const feather = {
+      strength: 1
+    };
+
     // --------------------------------------------------
     // Edge feathering
     // --------------------------------------------------
 
-    const feather = {
-      strength: 1
-    };
+    function removeEdgeFeather() {
+      background.style.webkitMaskImage = "none";
+      background.style.maskImage = "none";
+
+      background.style.webkitMaskComposite = "";
+      background.style.maskComposite = "";
+    }
 
     function applyEdgeFeather() {
       const strength = Math.max(
@@ -69,31 +78,31 @@
         Math.min(1, feather.strength)
       );
 
-      // Completely remove masking once feather reaches zero.
       if (strength <= 0.001) {
-        background.style.webkitMaskImage = "none";
-        background.style.maskImage = "none";
+        removeEdgeFeather();
         return;
       }
 
-      const featherSize = CONFIG.featherSizeVH * strength;
+      const featherSize = CONFIG.featherSizeVH;
 
-      // Each gradient softens one pair of opposite edges.
-      // Intersecting the gradients softens all four edges.
+      // As strength decreases from 1 to 0,
+      // edge opacity increases from 0 to 1.
+      const edgeOpacity = 1 - strength;
+
       const vertical = `linear-gradient(
         to bottom,
-        transparent 0%,
+        rgba(0, 0, 0, ${edgeOpacity}) 0%,
         black ${featherSize}vh,
         black calc(100% - ${featherSize}vh),
-        transparent 100%
+        rgba(0, 0, 0, ${edgeOpacity}) 100%
       )`;
 
       const horizontal = `linear-gradient(
         to right,
-        transparent 0%,
+        rgba(0, 0, 0, ${edgeOpacity}) 0%,
         black ${featherSize}vh,
         black calc(100% - ${featherSize}vh),
-        transparent 100%
+        rgba(0, 0, 0, ${edgeOpacity}) 100%
       )`;
 
       background.style.webkitMaskImage =
@@ -104,14 +113,6 @@
 
       background.style.webkitMaskComposite = "source-in";
       background.style.maskComposite = "intersect";
-    }
-
-    function removeEdgeFeather() {
-      background.style.webkitMaskImage = "none";
-      background.style.maskImage = "none";
-
-      background.style.webkitMaskComposite = "";
-      background.style.maskComposite = "";
     }
 
     // --------------------------------------------------
@@ -149,7 +150,7 @@
 
       timeline = gsap.timeline();
 
-      // Existing scale animation — unchanged.
+      // Scale 0 -> 1.1
       timeline.to(
         background,
         {
@@ -160,6 +161,7 @@
         CONFIG.startDelay
       );
 
+      // Scale 1.1 -> 1
       timeline.to(
         background,
         {
@@ -170,11 +172,10 @@
         CONFIG.startDelay + CONFIG.expandDuration
       );
 
-      // Fade away the edge feather just before 110% scale.
+      // Fade the edge feather over 2 seconds,
+      // starting when the video reaches 110%.
       const featherFadeStart =
-        CONFIG.startDelay +
-        CONFIG.expandDuration -
-        CONFIG.featherFadeDuration;
+        CONFIG.startDelay + CONFIG.expandDuration;
 
       timeline.to(
         feather,
@@ -208,7 +209,7 @@
           ? visibleHeight / rect.height
           : 0;
 
-      // Activate at the same threshold as CTA coin.
+      // Activate at 87% CTA visibility.
       if (
         !active &&
         visibilityRatio >= CONFIG.activationThreshold
@@ -217,7 +218,8 @@
         startBackground();
       }
 
-      // Reset after leaving viewport by another 20vh.
+      // Reset after exiting the viewport
+      // by another 20% of viewport height.
       if (active) {
         const exitedAbove =
           rect.bottom <
