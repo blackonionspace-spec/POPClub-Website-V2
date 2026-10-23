@@ -83,8 +83,8 @@
       configs.forEach((c) => {
         if (!c.active) return;
 
-        c.ty = ((pointerX / window.innerWidth) * 2 - 1) * 6;
-        c.tx = (1 - (pointerY / window.innerHeight) * 2) * 6;
+        c.ty = ((pointerX / window.innerWidth) * 2 - 1) * 3;
+        c.tx = (1 - (pointerY / window.innerHeight) * 2) * 3;
       });
 
       schedule();
