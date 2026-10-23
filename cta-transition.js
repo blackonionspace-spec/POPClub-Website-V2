@@ -33,7 +33,7 @@
   };
 
   function init() {
-    const section = document.querySelector(".section_CTA");
+    const section = document.querySelector(".section_cta");
 
     if (!section) {
       console.warn("[CTA Transition] Section not found.");
