@@ -1,16 +1,23 @@
 
 /*
- * POPClub V2 — Scroll Widget V2
+ * POPClub V2 — Scroll Widget V3
  *
  * Visual and mouse interaction prototype.
  * No GSAP or page scrolling integration yet.
  *
- * Changes:
- * - Default capsule thickness: 3px
- * - Hover capsule thickness: 6px
- * - Gap between capsules: 0.4vh
- * - Right offset: 4vw
- * - Continuous 6vw proximity hover zone
+ * V3 updates:
+ * - Section labels increased to 2vh
+ * - Labels are clickable
+ * - Larger invisible label hit areas
+ *
+ * Existing design preserved:
+ * - 60vh widget height
+ * - 20vh top offset
+ * - 4vw right offset
+ * - 8 rounded capsules
+ * - 0.4vh segment gaps
+ * - 3px inactive / 6px expanded thickness
+ * - 6vw proximity hover zone
  */
 
 (() => {
@@ -66,10 +73,8 @@
         }
 
         /*
-         * Continuous invisible hover zone.
-         *
-         * 6vw to the left and right,
-         * with a small vertical extension.
+         * Continuous invisible proximity zone.
+         * Extends 6vw horizontally.
          */
 
         #${WIDGET_ID}::before {
@@ -84,7 +89,7 @@
           pointer-events: auto;
         }
 
-        /* Eight equal capsule segments */
+        /* Eight equal rounded capsules */
 
         #${WIDGET_ID} .pop-scroll-segment {
           position: relative;
@@ -104,7 +109,7 @@
           font: inherit;
         }
 
-        /* Rounded capsule track */
+        /* Capsule track */
 
         #${WIDGET_ID} .pop-scroll-track {
           position: absolute;
@@ -129,7 +134,7 @@
           width: 6px;
         }
 
-        /* Completed progress fill */
+        /* Completed progress */
 
         #${WIDGET_ID} .pop-scroll-fill {
           position: absolute;
@@ -144,7 +149,10 @@
           transition: height 220ms ease;
         }
 
-        /* Section labels */
+        /*
+         * Section labels
+         * Font size scales with viewport height.
+         */
 
         #${WIDGET_ID} .pop-scroll-label {
           position: absolute;
@@ -155,7 +163,7 @@
 
           color: #fff;
           font-family: 'Figtree', sans-serif;
-          font-size: 14px;
+          font-size: 2vh;
           font-weight: 500;
           line-height: 1.2;
           white-space: nowrap;
@@ -172,7 +180,17 @@
           text-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
         }
 
-        /* Show the selected label */
+        /*
+         * Expanded label hit area.
+         * This becomes clickable when visible.
+         */
+
+        #${WIDGET_ID} .pop-scroll-label::before {
+          content: '';
+          position: absolute;
+          inset: -12px -14px;
+          background: transparent;
+        }
 
         #${WIDGET_ID}.is-expanded
         .pop-scroll-segment.is-label-visible
@@ -180,9 +198,11 @@
           opacity: var(--pop-label-opacity, 1);
           visibility: visible;
           transform: translate(0, -50%);
+          pointer-events: auto;
+          cursor: pointer;
         }
 
-        /* Keyboard accessibility */
+        /* Keyboard focus */
 
         #${WIDGET_ID} .pop-scroll-segment:focus-visible {
           outline: 2px solid white;
@@ -254,15 +274,19 @@
 
       segments.push({ segment, fill });
 
-      // Clicking changes the simulated section.
-      // No actual page navigation yet.
+      /*
+       * Both the capsule and its label are
+       * children of the same button.
+       *
+       * Clicking either activates the section.
+       */
 
       segment.addEventListener('click', () => {
         activeIndex = index;
         update();
       });
 
-      // Keyboard interaction
+      // Keyboard focus
 
       segment.addEventListener('focus', () => {
         expanded = true;
@@ -277,7 +301,7 @@
     });
 
     // ==========================================
-    // 3. PROXIMITY HOVER DETECTION
+    // 3. PROXIMITY HOVER
     // ==========================================
 
     widget.addEventListener('mouseenter', () => {
@@ -292,11 +316,8 @@
     });
 
     /*
-     * Determine the nearest capsule based
-     * on the pointer's vertical position.
-     *
-     * Works even when the pointer is not
-     * directly over the visible capsules.
+     * Find the closest section by pointer Y.
+     * This works across the invisible hover zone.
      */
 
     widget.addEventListener('pointermove', (event) => {
@@ -374,9 +395,6 @@
           labelVisible
         );
 
-        // Current label = 100% opacity.
-        // Other hovered labels = 65%.
-
         segment.style.setProperty(
           '--pop-label-opacity',
           hoveredIndex !== null && !active
@@ -389,10 +407,7 @@
           active ? 'location' : 'false'
         );
 
-        // Simulated progress:
-        // Previous = 100%
-        // Current = 50%
-        // Future = 0%
+        // Simulated progress
 
         fill.style.height =
           index < activeIndex
@@ -411,7 +426,7 @@
     update();
 
     console.info(
-      '[POPClub] Scroll widget V2 initialized.'
+      '[POPClub] Scroll widget V3 initialized.'
     );
   }
 
