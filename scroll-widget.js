@@ -1,8 +1,16 @@
 
 /*
- * POPClub V2 — Scroll Widget V1
- * Visual / mouse interaction prototype only.
- * No scroll or GSAP integration.
+ * POPClub V2 — Scroll Widget V2
+ *
+ * Visual and mouse interaction prototype.
+ * No GSAP or page scrolling integration yet.
+ *
+ * Changes:
+ * - Default capsule thickness: 3px
+ * - Hover capsule thickness: 6px
+ * - Gap between capsules: 0.4vh
+ * - Right offset: 4vw
+ * - Continuous 6vw proximity hover zone
  */
 
 (() => {
@@ -37,26 +45,46 @@
         #${WIDGET_ID} {
           position: fixed;
           top: 20vh;
-          right: 8vw;
+          right: 4vw;
           height: 60vh;
           width: 6px;
 
           display: flex;
           flex-direction: column;
-          gap: 0.08vh;
+          gap: 0.4vh;
 
           z-index: 9999;
           overflow: visible;
           isolation: isolate;
         }
 
+        #${WIDGET_ID},
         #${WIDGET_ID} *,
         #${WIDGET_ID} *::before,
         #${WIDGET_ID} *::after {
           box-sizing: border-box;
         }
 
-        /* Eight clickable segments */
+        /*
+         * Continuous invisible hover zone.
+         *
+         * 6vw to the left and right,
+         * with a small vertical extension.
+         */
+
+        #${WIDGET_ID}::before {
+          content: '';
+          position: absolute;
+          top: -12px;
+          bottom: -12px;
+          left: -6vw;
+          right: -6vw;
+
+          background: transparent;
+          pointer-events: auto;
+        }
+
+        /* Eight equal capsule segments */
 
         #${WIDGET_ID} .pop-scroll-segment {
           position: relative;
@@ -76,21 +104,6 @@
           font: inherit;
         }
 
-        /*
-         * Invisible interaction area extending
-         * toward the right edge of the screen.
-         */
-
-        #${WIDGET_ID} .pop-scroll-segment::before {
-          content: '';
-          position: absolute;
-          top: 0;
-          bottom: 0;
-          left: -16px;
-          right: -8vw;
-          background: transparent;
-        }
-
         /* Rounded capsule track */
 
         #${WIDGET_ID} .pop-scroll-track {
@@ -100,30 +113,30 @@
           left: 50%;
           transform: translateX(-50%);
 
-          width: 4px;
+          width: 3px;
           border-radius: 999px;
 
-          background: rgba(255,255,255,0.5);
+          background: rgba(255, 255, 255, 0.5);
           overflow: hidden;
           pointer-events: none;
 
           transition: width 220ms ease;
         }
 
-        /* Expand all capsules on interaction */
+        /* Expand all capsules on proximity hover */
 
         #${WIDGET_ID}.is-expanded .pop-scroll-track {
           width: 6px;
         }
 
-        /* White progress fill */
+        /* Completed progress fill */
 
         #${WIDGET_ID} .pop-scroll-fill {
           position: absolute;
           top: 0;
           left: 0;
           width: 100%;
-          height: 0;
+          height: 0%;
 
           border-radius: 999px;
           background: #fff;
@@ -156,10 +169,10 @@
             transform 180ms ease,
             visibility 180ms ease;
 
-          text-shadow: 0 1px 4px rgba(0,0,0,0.4);
+          text-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
         }
 
-        /* Reveal selected label */
+        /* Show the selected label */
 
         #${WIDGET_ID}.is-expanded
         .pop-scroll-segment.is-label-visible
@@ -177,7 +190,7 @@
           border-radius: 999px;
         }
 
-        /* Desktop only for now */
+        /* Desktop only */
 
         @media (max-width: 767px) {
           #${WIDGET_ID} {
@@ -203,6 +216,7 @@
 
     const widget = document.createElement('nav');
     widget.id = WIDGET_ID;
+
     widget.setAttribute(
       'aria-label',
       'Page sections (visual prototype)'
@@ -216,6 +230,7 @@
 
     SECTIONS.forEach((name, index) => {
       const segment = document.createElement('button');
+
       segment.type = 'button';
       segment.className = 'pop-scroll-segment';
       segment.setAttribute('aria-label', name);
@@ -239,24 +254,19 @@
 
       segments.push({ segment, fill });
 
-      // ========================================
-      // 3. MOUSE AND KEYBOARD INTERACTION
-      // ========================================
+      // Clicking changes the simulated section.
+      // No actual page navigation yet.
 
-      segment.addEventListener('mouseenter', () => {
-        hoveredIndex = index;
-        expanded = true;
+      segment.addEventListener('click', () => {
+        activeIndex = index;
         update();
       });
 
-      segment.addEventListener('mouseleave', () => {
-        hoveredIndex = null;
-        update();
-      });
+      // Keyboard interaction
 
       segment.addEventListener('focus', () => {
-        hoveredIndex = index;
         expanded = true;
+        hoveredIndex = index;
         update();
       });
 
@@ -264,15 +274,11 @@
         hoveredIndex = null;
         update();
       });
-
-      // Prototype selection only.
-      // Does NOT scroll the website.
-
-      segment.addEventListener('click', () => {
-        activeIndex = index;
-        update();
-      });
     });
+
+    // ==========================================
+    // 3. PROXIMITY HOVER DETECTION
+    // ==========================================
 
     widget.addEventListener('mouseenter', () => {
       expanded = true;
@@ -283,6 +289,53 @@
       expanded = false;
       hoveredIndex = null;
       update();
+    });
+
+    /*
+     * Determine the nearest capsule based
+     * on the pointer's vertical position.
+     *
+     * Works even when the pointer is not
+     * directly over the visible capsules.
+     */
+
+    widget.addEventListener('pointermove', (event) => {
+      if (event.pointerType === 'touch') return;
+
+      const widgetRect = widget.getBoundingClientRect();
+
+      if (
+        event.clientY < widgetRect.top ||
+        event.clientY > widgetRect.bottom
+      ) {
+        if (hoveredIndex !== null) {
+          hoveredIndex = null;
+          update();
+        }
+        return;
+      }
+
+      let nearestIndex = 0;
+      let nearestDistance = Infinity;
+
+      segments.forEach(({ segment }, index) => {
+        const rect = segment.getBoundingClientRect();
+        const centerY = rect.top + rect.height / 2;
+
+        const distance = Math.abs(
+          event.clientY - centerY
+        );
+
+        if (distance < nearestDistance) {
+          nearestDistance = distance;
+          nearestIndex = index;
+        }
+      });
+
+      if (hoveredIndex !== nearestIndex) {
+        hoveredIndex = nearestIndex;
+        update();
+      }
     });
 
     widget.addEventListener('focusout', (event) => {
@@ -321,8 +374,8 @@
           labelVisible
         );
 
-        // Hovered alternatives = 65% opacity.
-        // Current section = 100% opacity.
+        // Current label = 100% opacity.
+        // Other hovered labels = 65%.
 
         segment.style.setProperty(
           '--pop-label-opacity',
@@ -337,9 +390,9 @@
         );
 
         // Simulated progress:
-        // Previous = complete
+        // Previous = 100%
         // Current = 50%
-        // Future = incomplete
+        // Future = 0%
 
         fill.style.height =
           index < activeIndex
@@ -358,7 +411,7 @@
     update();
 
     console.info(
-      '[POPClub] Scroll widget V1 initialized.'
+      '[POPClub] Scroll widget V2 initialized.'
     );
   }
 
