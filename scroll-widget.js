@@ -424,12 +424,13 @@
           ? crt.start - window.innerHeight * 0.2
           : sectionStart('.section_problem'),
 
-        // Belief: 5000px into shared timeline.
-        crt
-          ? crt.start +
-            (5000 / 11300) *
-            (crt.end - crt.start)
-          : null,
+        // Belief: skip the 350px opening flash.
+// Land directly on the completed flash.
+crt
+  ? crt.start +
+    (5350 / 11300) *
+    (crt.end - crt.start)
+  : null,
 
         // Products: initial banner.
         products
