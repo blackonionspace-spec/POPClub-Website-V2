@@ -397,7 +397,7 @@
         beliefProgress,
         productProgress,
 
-        entranceProgress('.section_CTA'),
+        entranceProgress('.section_cta'),
         entranceProgress('.section_partners'),
         entranceProgress('.section_social_proof'),
         entranceProgress('.section_footer')
@@ -436,7 +436,7 @@
           ? products.start
           : sectionStart('.section_banner'),
 
-        sectionStart('.section_CTA'),
+        sectionStart('.section_cta'),
         sectionStart('.section_partners'),
         sectionStart('.section_social_proof'),
         sectionStart('.section_footer')
