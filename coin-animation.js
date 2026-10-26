@@ -599,7 +599,7 @@ coinSection.insertAdjacentElement("afterend", coinLayoutSpacer);
       // at exactly 3 seconds into the intro.
 
       timeline.fromTo(
-        ".coin_heading, .coin_logo",
+        ".coin_heading, .coin_logo, .coin_qr",
         {
           opacity: 0
         },
