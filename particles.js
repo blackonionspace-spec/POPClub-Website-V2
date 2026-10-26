@@ -48,10 +48,10 @@
       glowEnabled: true,
 
       // Size of halo relative to particle radius.
-      glowRadius: 10.0,
+      glowRadius: 8.0,
 
       // Strength of the surrounding glow.
-      glowIntensity: 1.0,
+      glowIntensity: 0.9,
 
       // Sprite resolution.
       // Generated once, not every frame.
