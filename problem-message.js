@@ -108,13 +108,22 @@
 
     const crtTimeline = gsap.timeline({
       scrollTrigger: {
-        trigger: section,
-        start: 'top top',
-        end: '+=' + PROBLEM_SCROLL_DISTANCE,
-        scrub: 1,
-        pin: true,
-        invalidateOnRefresh: true
-      }
+  trigger: section,
+  start: 'top top',
+  end: '+=' + PROBLEM_SCROLL_DISTANCE,
+  scrub: 1,
+  pin: true,
+  invalidateOnRefresh: true,
+
+  onEnter: () => screen.classList.add('grain-active'),
+  onEnterBack: () => screen.classList.add('grain-active'),
+  onLeave: () => screen.classList.remove('grain-active'),
+  onLeaveBack: () => screen.classList.remove('grain-active'),
+
+  onRefresh: (self) => {
+    screen.classList.toggle('grain-active', self.isActive);
+  }
+}
     });
 
     crtTimeline.set(
