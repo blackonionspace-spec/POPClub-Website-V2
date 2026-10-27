@@ -389,13 +389,96 @@
       "frames, 10500px segmented timeline"
     );
   }
+  /* =========================================
+     BELIEF TEXT VISIBILITY
+     ========================================= */
+
+  function initBeliefText() {
+    const items = [
+      {
+        element: document.querySelector(".belief_bills_text"),
+        fadeInStart: 85,
+        fadeInEnd: 89,
+        fadeOutStart: 89,
+        fadeOutEnd: 94
+      },
+      {
+        element: document.querySelector(".belief_coffee_text"),
+        fadeInStart: 125,
+        fadeInEnd: 129,
+        fadeOutStart: 129,
+        fadeOutEnd: 134
+      },
+      {
+        element: document.querySelector(".belief_shopping_text"),
+        fadeInStart: 165,
+        fadeInEnd: 169,
+        fadeOutStart: null,
+        fadeOutEnd: null
+      }
+    ];
+
+    function getOpacity(frame, item) {
+      if (frame < item.fadeInStart) return 0;
+
+      if (frame < item.fadeInEnd) {
+        return (frame - item.fadeInStart) /
+          (item.fadeInEnd - item.fadeInStart);
+      }
+
+      if (
+        item.fadeOutStart !== null &&
+        frame >= item.fadeOutStart
+      ) {
+        if (frame >= item.fadeOutEnd) return 0;
+
+        return 1 -
+          (frame - item.fadeOutStart) /
+          (item.fadeOutEnd - item.fadeOutStart);
+      }
+
+      return 1;
+    }
+
+    let lastFrame = null;
+
+    function updateText() {
+      const frame = Number.isFinite(window.beliefCurrentFrame)
+        ? window.beliefCurrentFrame
+        : -1;
+
+      if (frame !== lastFrame) {
+        lastFrame = frame;
+
+        items.forEach(item => {
+          if (!item.element) return;
+
+          const opacity = getOpacity(frame, item);
+
+          item.element.style.opacity = String(opacity);
+          item.element.style.visibility =
+            opacity > 0 ? "visible" : "hidden";
+        });
+      }
+
+      requestAnimationFrame(updateText);
+    }
+
+    updateText();
+
+    console.log("[Belief Text] Visibility initialized.");
+  }
+    function initializeBelief() {
+    initBeliefAnimation();
+    initBeliefText();
+  }
 
   if (document.readyState === "loading") {
     document.addEventListener(
       "DOMContentLoaded",
-      initBeliefAnimation
+      initializeBelief
     );
   } else {
-    initBeliefAnimation();
+    initializeBelief();
   }
 })();
