@@ -326,10 +326,107 @@
 
     checkCTAVisibility();
   }
+  // ==================================================
+  // CTA TEXT ANIMATION
+  // ==================================================
+
+  function initCTAText() {
+    const section = document.querySelector('.section_cta');
+    const textLayer = document.querySelector('.cta_text_layer');
+
+    if (!section || !textLayer || !window.gsap) {
+      console.warn('[CTA Text] Required elements or GSAP missing.');
+      return;
+    }
+
+    const CONFIG = {
+      fps: 24,
+      explosionFrame: 38,
+      expandDuration: 1.1,
+      settleDuration: 0.4,
+      resetOvershoot: 0.2,
+    };
+
+    let entranceTimeline = null;
+    let scheduledStart = null;
+    let armed = false;
+
+    function resetText() {
+      if (scheduledStart) {
+        scheduledStart.kill();
+        scheduledStart = null;
+      }
+
+      if (entranceTimeline) {
+        entranceTimeline.kill();
+        entranceTimeline = null;
+      }
+
+      gsap.killTweensOf(textLayer);
+
+      gsap.set(textLayer, {
+        scale: 0,
+        opacity: 0,
+        transformOrigin: '50% 50%',
+      });
+    }
+
+    function animateText() {
+      scheduledStart = null;
+
+      entranceTimeline = gsap.timeline();
+
+      entranceTimeline.to(textLayer, {
+        scale: 1,
+        opacity: 1,
+        duration: 1.2,
+        ease: 'power2.out',
+      });
+    }
+
+    section.addEventListener('cta:coin-start', () => {
+      armed = true;
+      resetText();
+
+      scheduledStart = gsap.delayedCall(
+        CONFIG.explosionFrame / CONFIG.fps,
+        animateText
+      );
+    });
+
+    function checkReset() {
+      if (!armed) return;
+
+      const rect = section.getBoundingClientRect();
+      const extra = window.innerHeight * CONFIG.resetOvershoot;
+
+      if (
+        rect.bottom < -extra ||
+        rect.top > window.innerHeight + extra
+      ) {
+        armed = false;
+        resetText();
+      }
+    }
+
+    window.addEventListener('scroll', checkReset, {
+      passive: true,
+    });
+
+    window.addEventListener('resize', checkReset);
+
+    resetText();
+
+    console.log('[CTA Text] Scale + bounce initialized.');
+  }
+    function initializeCTA() {
+    initCTAText();
+    init();
+  }
 
   if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", init);
+    document.addEventListener("DOMContentLoaded", initializeCTA);
   } else {
-    init();
+    initializeCTA();
   }
 })();
