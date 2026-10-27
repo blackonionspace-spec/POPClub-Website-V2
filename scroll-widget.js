@@ -51,9 +51,9 @@
     style.textContent = `
       #${WIDGET_ID} {
         position: fixed;
-        top: 20vh;
+        top: 25vh;
         right: 4vw;
-        height: 60vh;
+        height: 50vh;
         width: 6px;
 
         display: flex;
