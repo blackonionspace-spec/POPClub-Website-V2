@@ -13,11 +13,13 @@
 
   if (host.dataset.ctaGlbInitialized === 'true') return;
   host.dataset.ctaGlbInitialized = 'true';
+  host.style.opacity = '0';
 
   const BASE =
     'https://cdn.jsdelivr.net/gh/blackonionspace-spec/POPClub-Website-V2@18a86d5298fe95b24680480ab031b5891efff713/cta-3d/';
 
   const START_DELAY = 1.42;
+  const FADE_DURATION = 0.5;
   const RESET_OVERSHOOT = 0.2;
   const START_FRAME = 25;
   const END_FRAME = 65;
@@ -690,9 +692,12 @@ gradient.addColorStop(1, '#200401');
     resetInteractions();
 
     renderer.domElement.style.visibility =
-      'hidden';
+  'hidden';
 
-    if (ready) setFrame(START_FRAME);
+gsap.killTweensOf(host);
+gsap.set(host, { opacity: 0 });
+
+if (ready) setFrame(START_FRAME);
   }
 
   function start() {
@@ -713,11 +718,18 @@ gradient.addColorStop(1, '#200401');
     setFrame(START_FRAME);
 
     renderer.domElement.style.visibility =
-      'visible';
+  'visible';
 
-    console.log(
-      '[CTA GLB] V10 animation started'
-    );
+gsap.killTweensOf(host);
+gsap.to(host, {
+  opacity: 1,
+  duration: FADE_DURATION,
+  ease: 'power2.out'
+});
+
+console.log(
+  '[CTA GLB] V10 animation started'
+);
   }
 
   function checkReset() {
