@@ -52,7 +52,7 @@
       #${WIDGET_ID} {
         position: fixed;
         top: 25vh;
-        right: 4vw;
+        right: 2.5vw;
         height: 50vh;
         width: 6px;
 
