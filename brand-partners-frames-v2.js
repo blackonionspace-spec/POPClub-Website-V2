@@ -1,5 +1,5 @@
 ﻿/* POPClub V2 - Brand Partners New Frames */
-window.brandPartnersFrameURLs = [
+window.partnersShutterFrameURLs = [
   "https://s3.amazonaws.com/webflow-prod-assets/6ac4f76204430eb900a80285/6ae9c119c5c239348431394c_0001.avif",
   "https://s3.amazonaws.com/webflow-prod-assets/6ac4f76204430eb900a80285/6ae9c1197fca82d5e99dcc8e_0002.avif",
   "https://s3.amazonaws.com/webflow-prod-assets/6ac4f76204430eb900a80285/6ae9c11908336d82fe9d66b4_0003.avif",
