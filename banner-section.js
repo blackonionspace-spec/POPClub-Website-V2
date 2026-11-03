@@ -2,8 +2,9 @@
 /*
  * POPClub V2 — Banner Section
  *
- * Spotlight + scroll-driven product carousel
- * Experimental first-pass holds on all cards.
+ * 1. Mouse-following background spotlight
+ * 2. Scroll-driven products carousel
+ * 3. Mandatory first-pass video viewing
  *
  * Banner CSS remains in Webflow Head.
  */
@@ -47,8 +48,17 @@
         currentX += (targetX - currentX) * 0.1;
         currentY += (targetY - currentY) * 0.1;
 
-        section.style.setProperty('--spot-x', currentX + 'px');
-        section.style.setProperty('--spot-y', currentY + 'px');
+        if (initialized) {
+          section.style.setProperty(
+            '--spot-x',
+            currentX + 'px'
+          );
+
+          section.style.setProperty(
+            '--spot-y',
+            currentY + 'px'
+          );
+        }
       }
 
       requestAnimationFrame(animateSpotlight);
@@ -104,7 +114,7 @@
     const lastIndex = slides.length - 1;
 
     // ==========================================
-    // ORIGINAL SCROLL SETTINGS
+    // ORIGINAL CAROUSEL SETTINGS
     // ==========================================
 
     const BANNER_HOLD = 0.75;
@@ -123,33 +133,44 @@
     let bannerTrigger = null;
 
     // ==========================================
-    // FIRST-PASS HOLD SETTINGS
+    // FIRST-PASS VIEWING GATE
     // ==========================================
 
     const GATE = {
       enabled: true,
 
-      // Extra viewing time after video ends.
-      afterVideoMs: 700,
+      // Emergency release if playback stalls.
+      maxWaitMs: 8000,
 
-      // Minimum time before manual skipping.
-      minimumSkipMs: 2000,
+      // Temporary exemption for navigation clicks.
+      navigationBypassMs: 1500,
 
-      // Quiet period distinguishing scroll attempts.
-      gestureQuietMs: 500,
-
-      // Safety release if video stalls.
-      maxWaitMs: 6000
+      // Tolerance around scroll boundaries.
+      tolerancePx: 2
     };
 
-    // A gate is used only once per card.
-    const visited = new Set();
+    // Cards unlock in sequence, once per page load.
+    // Initially, no card has been completed.
+    let unlockedThrough = -1;
 
-    let holdingIndex = -1;
-    let holdStartedAt = 0;
-    let lastWheelAt = 0;
-    let holdTimer = null;
-    let releaseTimer = null;
+    let gateTimer = null;
+    let gateCardIndex = -1;
+
+    let bypassUntil = 0;
+    let correctingScroll = false;
+
+    const videos = [];
+
+    function gateEnabled() {
+      return (
+        GATE.enabled &&
+        unlockedThrough < lastIndex
+      );
+    }
+
+    function isBypassing() {
+      return performance.now() < bypassUntil;
+    }
 
     function cardEndProgress(index) {
       return (
@@ -161,149 +182,159 @@
     function cardEndY(index) {
       if (!bannerTrigger) return null;
 
-      return bannerTrigger.start +
+      return (
+        bannerTrigger.start +
         cardEndProgress(index) *
-        (bannerTrigger.end - bannerTrigger.start);
+        (bannerTrigger.end - bannerTrigger.start)
+      );
     }
 
-    function clearGateTimers() {
-      clearTimeout(holdTimer);
-      clearTimeout(releaseTimer);
-
-      holdTimer = null;
-      releaseTimer = null;
+    function nextLockedIndex() {
+      return Math.min(
+        unlockedThrough + 1,
+        lastIndex
+      );
     }
 
-    function releaseGate(reason) {
-      if (holdingIndex < 0) return;
+    function currentBoundary() {
+      if (!gateEnabled()) return null;
 
-      const releasedIndex = holdingIndex;
+      return cardEndY(nextLockedIndex());
+    }
 
-      clearGateTimers();
+    function clearGateTimer() {
+      if (gateTimer !== null) {
+        clearTimeout(gateTimer);
+        gateTimer = null;
+      }
+    }
 
-      holdingIndex = -1;
+    function unlockCard(index, reason) {
+      // Never unlock cards out of sequence.
+      if (index !== unlockedThrough + 1) return;
+
+      clearGateTimer();
+      gateCardIndex = -1;
+
+      unlockedThrough = index;
 
       console.info(
-        '[Banner Products] Card',
-        releasedIndex + 1,
-        'hold released:',
+        '[Banner Products] Unlocked card',
+        index + 1,
         reason
       );
     }
 
-    function beginGate(index) {
+    function startGateTimer(index) {
       if (
-        !GATE.enabled ||
-        visited.has(index) ||
-        holdingIndex >= 0
+        index !== nextLockedIndex() ||
+        gateCardIndex === index
       ) return;
 
-      visited.add(index);
+      clearGateTimer();
 
-      holdingIndex = index;
-      holdStartedAt = performance.now();
-      lastWheelAt = holdStartedAt;
+      gateCardIndex = index;
 
-      holdTimer = setTimeout(
-        () => releaseGate('safety timeout'),
-        GATE.maxWaitMs
-      );
+      gateTimer = setTimeout(() => {
+        if (index === nextLockedIndex()) {
+          console.warn(
+            '[Banner Products] Playback timeout:',
+            index + 1
+          );
 
-      console.info(
-        '[Banner Products] Holding card',
-        index + 1
-      );
+          unlockCard(index, 'failsafe');
+        }
+      }, GATE.maxWaitMs);
     }
 
-    function videoFinished(index) {
-      if (holdingIndex !== index) return;
-
-      clearTimeout(releaseTimer);
-
-      releaseTimer = setTimeout(
-        () => releaseGate('video completed'),
-        GATE.afterVideoMs
-      );
-    }
-
-    // ==========================================
-    // FIRST-PASS WHEEL CONTROL
-    // ==========================================
-
-    function onBannerWheel(event) {
+    function enforceBoundary() {
       if (
-        !GATE.enabled ||
         !bannerTrigger ||
-        event.deltaY <= 0 ||
-        event.ctrlKey ||
-        event.defaultPrevented
+        !gateEnabled() ||
+        isBypassing() ||
+        correctingScroll
       ) return;
+
+      const boundary = currentBoundary();
+      if (boundary === null) return;
 
       const y = window.scrollY;
 
+      // Do not interfere before the banner.
+      if (y < bannerTrigger.start) return;
+
+      // Only constrain forward progression.
+      if (y <= boundary + GATE.tolerancePx) return;
+
+      correctingScroll = true;
+
+      window.scrollTo({
+        top: boundary,
+        behavior: 'instant'
+      });
+
+      ScrollTrigger.update();
+
+      correctingScroll = false;
+
+      // Activate the card after reaching
+      // its completed entry position.
+      activateProduct(nextLockedIndex());
+    }
+
+    // ==========================================
+    // NAVIGATION WIDGET BYPASS
+    // ==========================================
+
+    // The widget uses window.scrollTo() directly.
+    // Its click is marked as an intentional jump.
+
+    document.addEventListener(
+      'click',
+      event => {
+        if (
+          event.target.closest(
+            '#pop-scroll-widget .pop-scroll-segment'
+          )
+        ) {
+          bypassUntil =
+            performance.now() +
+            GATE.navigationBypassMs;
+
+          clearGateTimer();
+          gateCardIndex = -1;
+
+          console.info(
+            '[Banner Products] Navigation bypass.'
+          );
+        }
+      },
+      true
+    );
+
+    // ==========================================
+    // WHEEL INTERCEPTION
+    // ==========================================
+
+    function onWheel(event) {
       if (
-        y < bannerTrigger.start - 2 ||
-        y > bannerTrigger.end + 2
+        !gateEnabled() ||
+        !bannerTrigger ||
+        isBypassing() ||
+        event.ctrlKey ||
+        event.deltaY <= 0 ||
+        event.defaultPrevented
       ) return;
 
-      const now = performance.now();
-
-      // ----------------------------------------
-      // ACTIVE HOLD
-      // ----------------------------------------
-
-      if (holdingIndex >= 0) {
-        const boundary = cardEndY(holdingIndex);
-
-        if (boundary === null) return;
-
-        // A navigation-widget jump can bypass
-        // the gate without being pulled backward.
-        if (y > boundary + 4) {
-          releaseGate('navigation bypass');
-          return;
-        }
-
-        const elapsed = now - holdStartedAt;
-
-        const freshGesture =
-          now - lastWheelAt >=
-          GATE.gestureQuietMs;
-
-        lastWheelAt = now;
-
-        if (
-          elapsed >= GATE.minimumSkipMs &&
-          freshGesture
-        ) {
-          releaseGate('deliberate scroll skip');
-          return;
-        }
-
-        event.preventDefault();
-
-        return;
-      }
-
-      // ----------------------------------------
-      // FIND NEXT UNVISITED CARD
-      // ----------------------------------------
-
-      let nextIndex = -1;
-
-      for (let i = 0; i <= lastIndex; i++) {
-        if (!visited.has(i)) {
-          nextIndex = i;
-          break;
-        }
-      }
-
-      if (nextIndex < 0) return;
-
-      const boundary = cardEndY(nextIndex);
+      const boundary = currentBoundary();
       if (boundary === null) return;
 
-      // Normalize wheel deltas.
+      const y = window.scrollY;
+
+      // Wheel input may arrive before the
+      // banner begins. Catch gestures that
+      // would cross the next boundary.
+
       const multiplier =
         event.deltaMode === 1
           ? 16
@@ -313,12 +344,9 @@
 
       const delta = event.deltaY * multiplier;
 
-      // If the scroll would reach or cross
-      // the next card's completed position,
-      // stop exactly at that card.
       if (
-        y <= boundary + 2 &&
-        y + delta >= boundary - 2
+        y <= boundary + GATE.tolerancePx &&
+        y + delta >= boundary - GATE.tolerancePx
       ) {
         event.preventDefault();
 
@@ -329,21 +357,31 @@
 
         ScrollTrigger.update();
 
-        beginGate(nextIndex);
+        activateProduct(nextLockedIndex());
 
-        // Ensure playback starts even when a
-        // large scroll lands at the boundary.
-        activateProduct(nextIndex);
+        return;
+      }
+
+      if (y >= boundary - GATE.tolerancePx) {
+        event.preventDefault();
       }
     }
 
     window.addEventListener(
       'wheel',
-      onBannerWheel,
+      onWheel,
       {
         passive: false,
         capture: true
       }
+    );
+
+    // Catch overshoots caused by momentum,
+    // keyboard scrolling or other native input.
+    window.addEventListener(
+      'scroll',
+      enforceBoundary,
+      { passive: true }
     );
 
     // ==========================================
@@ -352,9 +390,12 @@
 
     const products = slides.map((slide, index) => {
       const video = slide.querySelector('video');
+
       const content = slide.querySelector(
         '.product_content'
       );
+
+      videos[index] = video;
 
       if (!video || !content) {
         console.warn(
@@ -479,6 +520,12 @@
           return;
         }
 
+        // Start the failsafe when the locked
+        // card's playback is requested.
+        if (index === nextLockedIndex()) {
+          startGateTimer(index);
+        }
+
         const promise = video.play();
 
         if (
@@ -490,6 +537,11 @@
               '[Banner Products] Video playback failed:',
               error
             );
+
+            // Never permanently trap the user.
+            if (index === nextLockedIndex()) {
+              unlockCard(index, 'playback failure');
+            }
           });
         }
 
@@ -513,9 +565,11 @@
           stopTracking();
           updateText();
 
-          // Release the first-pass hold
-          // after the additional viewing delay.
-          videoFinished(index);
+          // Actual video completion is the
+          // primary first-pass unlock signal.
+          if (index === nextLockedIndex()) {
+            unlockCard(index, 'video ended');
+          }
         });
 
         video.addEventListener(
@@ -561,6 +615,7 @@
       if (activeIndex === -1) return;
 
       products[activeIndex].pause();
+
       activeIndex = -1;
     }
 
@@ -665,11 +720,25 @@
 
         snap: {
           snapTo: progress => {
-            // While holding, snap to the
-            // current card's finished position.
-            if (holdingIndex >= 0) {
-              return cardEndProgress(
-                holdingIndex
+            // Prevent snapping forward into
+            // a card that has not been unlocked.
+            if (
+              gateEnabled() &&
+              !isBypassing()
+            ) {
+              const limit =
+                cardEndProgress(nextLockedIndex());
+
+              const permitted = snapPoints.filter(
+                point => point <= limit + 0.0001
+              );
+
+              return permitted.reduce(
+                (closest, point) =>
+                  Math.abs(point - progress) <
+                  Math.abs(closest - progress)
+                    ? point
+                    : closest
               );
             }
 
@@ -695,21 +764,11 @@
           const units =
             self.progress * totalUnits;
 
-          // Programmatic navigation may
-          // jump beyond a held card.
-          if (holdingIndex >= 0) {
-            const boundary =
-              cardEndProgress(holdingIndex);
-
-            if (
-              self.progress >
-              boundary + 0.01
-            ) {
-              releaseGate('programmatic navigation');
-            }
-          }
-
           syncActiveProduct(units);
+
+          // Catch large jumps that bypass
+          // ordinary wheel-event detection.
+          enforceBoundary();
         }
       }
     });
@@ -748,7 +807,7 @@
       });
     });
 
-    // Final Pop Shop hold.
+    // Final hold.
     timeline.to({}, {
       duration: END_HOLD
     });
@@ -774,15 +833,13 @@
 
         syncActiveProduct(units);
       },
-      {
-        threshold: 0
-      }
+      { threshold: 0 }
     );
 
     observer.observe(section);
 
     console.log(
-      '[Banner Products] Carousel ready — all-card first-pass hold test.'
+      '[Banner Products] Carousel ready — mandatory first-pass video gates.'
     );
   }
 
