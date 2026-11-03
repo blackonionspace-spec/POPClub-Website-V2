@@ -6,10 +6,12 @@
     section: ".section_partners",
     layer: ".partners_shutter_layer",
     background: ".partners_bg",
+
     frameCount: 25,
-    fps: 24,
-    playVisibility: 0.95,
-    resetVisibility: 0.50
+
+    // Scroll-controlled visibility range.
+    startVisibility: 0.30,
+    endVisibility: 1.00
   };
 
   function init() {
@@ -19,16 +21,28 @@
     const urls = window.partnersShutterFrameURLs;
 
     if (!section || !layer || !background) {
-      console.warn("Partners shutter: Missing Webflow elements.");
+      console.warn(
+        "Partners shutter: Missing Webflow elements."
+      );
       return;
     }
 
-    if (!Array.isArray(urls) || urls.length !== CONFIG.frameCount) {
-      console.warn("Partners shutter: Expected 25 frame URLs.");
+    if (
+      !Array.isArray(urls) ||
+      urls.length !== CONFIG.frameCount
+    ) {
+      console.warn(
+        "Partners shutter: Expected 25 frame URLs."
+      );
       return;
     }
+
+    // ==========================================
+    // IMAGE ELEMENT
+    // ==========================================
 
     const image = document.createElement("img");
+
     image.alt = "";
     image.setAttribute("aria-hidden", "true");
 
@@ -54,92 +68,101 @@
     layer.style.pointerEvents = "none";
     layer.appendChild(image);
 
-    // Preload all 25 frames.
+    // ==========================================
+    // PRELOAD ALL 25 FRAMES
+    // ==========================================
+
     const frames = urls.map((url) => {
       const frame = new Image();
       frame.src = url;
       return frame;
     });
 
-    let played = false;
-    let playing = false;
-    let frameIndex = 0;
-    let playbackTimer = null;
+    let frameIndex = -1;
 
-    image.src = urls[0];
     layer.style.visibility = "visible";
 
+    // ==========================================
+    // FRAME DISPLAY
+    // ==========================================
+
     function showFrame(index) {
-      frameIndex = Math.max(0, Math.min(index, urls.length - 1));
+      const nextIndex = Math.max(
+        0,
+        Math.min(
+          Math.round(index),
+          urls.length - 1
+        )
+      );
+
+      // Avoid changing the image source
+      // unnecessarily on every scroll event.
+      if (nextIndex === frameIndex) return;
+
+      frameIndex = nextIndex;
       image.src = urls[frameIndex];
     }
 
-    function play() {
-      if (played || playing) return;
+    // ==========================================
+    // SCROLL PROGRESS
+    // ==========================================
 
-      playing = true;
-      played = true;
-      layer.style.visibility = "visible";
-      showFrame(0);
-
-      let nextFrame = 1;
-
-      playbackTimer = window.setInterval(() => {
-        showFrame(nextFrame);
-        nextFrame++;
-
-        if (nextFrame >= urls.length) {
-          clearInterval(playbackTimer);
-          playbackTimer = null;
-          playing = false;
-          showFrame(urls.length - 1);
-        }
-      }, 1000 / CONFIG.fps);
-    }
-
-    function reset() {
-      if (playbackTimer !== null) {
-        clearInterval(playbackTimer);
-        playbackTimer = null;
-      }
-
-      played = false;
-      playing = false;
-      showFrame(0);
-      layer.style.visibility = "visible";
-    }
-
-    function update() {
+    function getProgress() {
       const rect = section.getBoundingClientRect();
       const viewportHeight = window.innerHeight;
 
-      const visiblePixels = Math.max(
+      const referenceHeight = Math.min(
+        rect.height,
+        viewportHeight
+      );
+
+      if (referenceHeight <= 0) return 0;
+
+      // The section's leading edge enters
+      // from the bottom of the viewport.
+      //
+      // Progress increases as the section
+      // becomes more visible on entry.
+      //
+      // It stays at 100% after the section
+      // has fully entered the viewport.
+
+      const entryVisibility =
+        (viewportHeight - rect.top) /
+        referenceHeight;
+
+      const rawProgress =
+        (
+          entryVisibility -
+          CONFIG.startVisibility
+        ) /
+        (
+          CONFIG.endVisibility -
+          CONFIG.startVisibility
+        );
+
+      return Math.max(
         0,
-        Math.min(rect.bottom, viewportHeight) -
-        Math.max(rect.top, 0)
+        Math.min(1, rawProgress)
       );
-
-      const visibility = Math.min(
-        1,
-        visiblePixels / Math.min(rect.height, viewportHeight)
-      );
-
-      // Play when 95% of the section is visible.
-      if (visibility >= CONFIG.playVisibility) {
-        play();
-      }
-
-      // Reset only when the visitor has moved
-      // at least 50% beyond the section.
-      if (
-        rect.bottom <= viewportHeight * CONFIG.resetVisibility ||
-        rect.top >= viewportHeight * CONFIG.resetVisibility
-      ) {
-        if (played || playing) {
-          reset();
-        }
-      }
     }
+
+    // ==========================================
+    // UPDATE FRAME FROM SCROLL
+    // ==========================================
+
+    function update() {
+      const progress = getProgress();
+
+      const frame =
+        progress * (urls.length - 1);
+
+      showFrame(frame);
+    }
+
+    // ==========================================
+    // REQUEST ANIMATION FRAME THROTTLING
+    // ==========================================
 
     let ticking = false;
 
@@ -154,32 +177,62 @@
       });
     }
 
-    window.addEventListener("scroll", requestUpdate, { passive: true });
-    window.addEventListener("resize", requestUpdate);
+    window.addEventListener(
+      "scroll",
+      requestUpdate,
+      { passive: true }
+    );
 
-    // Keep the alignment preview available.
-    const params = new URLSearchParams(window.location.search);
+    window.addEventListener(
+      "resize",
+      requestUpdate
+    );
+
+    // ==========================================
+    // ALIGNMENT PREVIEW
+    // ==========================================
+
+    const params = new URLSearchParams(
+      window.location.search
+    );
 
     if (params.get("previewShutter") === "1") {
-      layer.style.visibility = "visible";
+      // Show the final frame for alignment.
+      showFrame(urls.length - 1);
     } else {
       update();
     }
+
+    // ==========================================
+    // DEBUG / MANUAL CONTROLS
+    // ==========================================
 
     window.partnersShutter = {
       layer,
       image,
       frames,
       urls,
-      play,
-      reset
+
+      showFrame,
+      update,
+
+      getProgress,
+
+      reset() {
+        showFrame(0);
+      }
     };
 
-    console.log("Partners shutter: Animation controller ready.");
+    console.log(
+      "Partners shutter: Scroll-controlled sequence ready."
+    );
   }
 
   if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", init);
+    document.addEventListener(
+      "DOMContentLoaded",
+      init
+    );
   } else {
     init();
   }
