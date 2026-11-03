@@ -1,22 +1,38 @@
 
 /*
  * POPClub V2 — CTA Coin Radial Reveal
- * Standalone mask for .cta_coin_layer.
- * Reveal progresses only while CTA visibility increases, and never reverses.
- * 40% -> 98% visibility: radius 15vw -> 110vw.
- * At 98%: mask fades out over 1 second and stays removed.
- * Rearms ONLY after the same exit + 20vh reset used by CTA coin.
+ *
+ * Independent script for .cta_coin_layer
+ *
+ * 40% visibility: radial reveal begins at 5vw
+ * 98% visibility: radial reveal reaches 55vw
+ *
+ * Feather: 6vw
+ *
+ * Before 98%:
+ *   Reveal expands and contracts with scroll.
+ *
+ * At 98%:
+ *   Mask fades away over 1 second.
+ *   Reveal is locked complete for this cycle.
+ *
+ * Reset:
+ *   CTA exits viewport + another 20vh.
  */
+
 (() => {
   "use strict";
 
   const CONFIG = {
     revealStart: 0.40,
     revealEnd: 0.98,
-    startRadiusVW: 15,
-    endRadiusVW: 110,
-    featherVW: 12,
+
+    startRadiusVW: 5,
+    endRadiusVW: 55,
+
+    featherVW: 6,
     fadeDuration: 1,
+
     resetOvershoot: 0.2
   };
 
@@ -25,24 +41,32 @@
     const layer = document.querySelector(".cta_coin_layer");
 
     if (!section || !layer) {
-      console.warn("[CTA Reveal] Section or coin layer not found.");
+      console.warn(
+        "[CTA Reveal] Section or coin layer not found."
+      );
       return;
     }
 
-    if (layer.dataset.ctaRadialInitialized === "true") return;
+    if (layer.dataset.ctaRadialInitialized === "true") {
+      return;
+    }
+
     layer.dataset.ctaRadialInitialized = "true";
 
-    let phase = "armed"; // armed | fading | complete
-    let maxProgress = 0;
+    let phase = "armed";
     let fadeStart = null;
     let fadeRaf = null;
     let updateRaf = null;
-    let previousRatio = null;
 
     const clamp = (n, min, max) =>
       Math.min(max, Math.max(min, n));
 
-    const smoothstep = n => n * n * (3 - 2 * n);
+    const smoothstep = n =>
+      n * n * (3 - 2 * n);
+
+    // -----------------------------------------------
+    // Radial mask
+    // -----------------------------------------------
 
     function setMask(radiusVW, outerOpacity) {
       const inner = Math.max(
@@ -50,11 +74,16 @@
         radiusVW - CONFIG.featherVW
       );
 
-      const alpha = clamp(outerOpacity, 0, 1);
+      const alpha = clamp(
+        outerOpacity,
+        0,
+        1
+      );
 
       const gradient =
         `radial-gradient(circle at 50% 50%, ` +
-        `black 0, black ${inner}vw, ` +
+        `black 0, ` +
+        `black ${inner}vw, ` +
         `rgba(0,0,0,${alpha}) ${radiusVW}vw, ` +
         `rgba(0,0,0,${alpha}) 100%)`;
 
@@ -67,6 +96,10 @@
       layer.style.maskImage = "none";
     }
 
+    // -----------------------------------------------
+    // Fade control
+    // -----------------------------------------------
+
     function cancelFade() {
       if (fadeRaf !== null) {
         cancelAnimationFrame(fadeRaf);
@@ -76,12 +109,14 @@
       fadeStart = null;
     }
 
+    // -----------------------------------------------
+    // Reset
+    // -----------------------------------------------
+
     function reset() {
       cancelFade();
 
       phase = "armed";
-      maxProgress = 0;
-      previousRatio = 0;
 
       setMask(0, 0);
 
@@ -89,6 +124,10 @@
         "[CTA Reveal] Reset after CTA exit + 20vh."
       );
     }
+
+    // -----------------------------------------------
+    // Fade out mask at 98%
+    // -----------------------------------------------
 
     function fade(now) {
       if (phase !== "fading") return;
@@ -107,7 +146,13 @@
       if (progress >= 1) {
         phase = "complete";
         fadeRaf = null;
+
         clearMask();
+
+        console.log(
+          "[CTA Reveal] Complete."
+        );
+
         return;
       }
 
@@ -119,6 +164,10 @@
       fadeRaf = requestAnimationFrame(fade);
     }
 
+    // -----------------------------------------------
+    // Scroll-controlled visibility
+    // -----------------------------------------------
+
     function update() {
       updateRaf = null;
 
@@ -127,19 +176,22 @@
 
       if (rect.height <= 0 || vh <= 0) return;
 
-      // Same reset boundaries as CTA coin script.
+      // Same reset conditions as CTA coin
       const exitedAbove =
-        rect.bottom < -vh * CONFIG.resetOvershoot;
+        rect.bottom <
+        -vh * CONFIG.resetOvershoot;
 
       const exitedBelow =
-        rect.top > vh * (1 + CONFIG.resetOvershoot);
+        rect.top >
+        vh * (1 + CONFIG.resetOvershoot);
 
       if (exitedAbove || exitedBelow) {
-        if (phase !== "armed" || maxProgress > 0) {
+        if (phase !== "armed") {
           reset();
+        } else {
+          setMask(0, 0);
         }
 
-        previousRatio = 0;
         return;
       }
 
@@ -151,19 +203,18 @@
 
       const ratio = visibleHeight / rect.height;
 
-      if (phase !== "armed") {
-        previousRatio = ratio;
+      // Once 98% has been reached,
+      // don't reverse until a full reset.
+      if (phase !== "armed") return;
+
+      // -------------------------------------------
+      // Bidirectional reveal BEFORE 98%
+      // -------------------------------------------
+
+      if (ratio < CONFIG.revealStart) {
+        setMask(0, 0);
         return;
       }
-
-      // Reveal only on increasing visibility.
-      const increasing =
-        previousRatio === null ||
-        ratio > previousRatio;
-
-      previousRatio = ratio;
-
-      if (!increasing) return;
 
       const progress = clamp(
         (ratio - CONFIG.revealStart) /
@@ -172,23 +223,27 @@
         1
       );
 
-      maxProgress = Math.max(maxProgress, progress);
+      const radius =
+        CONFIG.startRadiusVW +
+        (
+          CONFIG.endRadiusVW -
+          CONFIG.startRadiusVW
+        ) * progress;
+
+      setMask(radius, 0);
+
+      // -------------------------------------------
+      // Lock reveal at 98%
+      // -------------------------------------------
 
       if (ratio >= CONFIG.revealEnd) {
         phase = "fading";
+
         fadeRaf = requestAnimationFrame(fade);
-        return;
-      }
 
-      if (maxProgress === 0) {
-        setMask(0, 0);
-      } else {
-        const radius =
-          CONFIG.startRadiusVW +
-          (CONFIG.endRadiusVW -
-            CONFIG.startRadiusVW) * maxProgress;
-
-        setMask(radius, 0);
+        console.log(
+          "[CTA Reveal] 98% reached — fading mask."
+        );
       }
     }
 
@@ -197,6 +252,10 @@
         updateRaf = requestAnimationFrame(update);
       }
     }
+
+    // -----------------------------------------------
+    // Initialize
+    // -----------------------------------------------
 
     setMask(0, 0);
 
@@ -214,7 +273,7 @@
     requestUpdate();
 
     console.log(
-      "[CTA Reveal] Initialized; reveal plays once per CTA reset."
+      "[CTA Reveal] Initialized."
     );
   }
 
