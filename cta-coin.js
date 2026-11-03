@@ -3,8 +3,9 @@
  * POPClub V2 — CTA Coin Animation
  *
  * Coin: 40 AVIF frames at 24 FPS
- * Activation: CTA 87% visible
+ * Activation: CTA 98% visible
  * First coin frame visible before activation
+ * Radial reveal: 20% to 98% entry visibility
  * Replays on CTA re-entry
  * Emits cta:coin-start and cta:coin-complete events
  */
@@ -15,7 +16,12 @@
   const CONFIG = {
     fps: 24,
     maxDPR: 2,
-    activationThreshold: 0.87
+    activationThreshold: 0.98,
+
+    radialStart: 0.20,
+    radialEnd: 0.98,
+    radialInitialRadius: 0.06,
+    radialFeather: 0.22
   };
 
   function init() {
@@ -98,6 +104,8 @@
       if (ready && currentFrame >= 0 && !completed) {
         drawFrame(currentFrame);
       }
+
+      updateRadialReveal();
     }
 
     // --------------------------------------------------
@@ -132,6 +140,85 @@
     }
 
     // --------------------------------------------------
+    // Radial reveal
+    // --------------------------------------------------
+
+    function updateRadialReveal() {
+      const rect = section.getBoundingClientRect();
+      const viewportHeight = window.innerHeight;
+
+      // Use entry progress rather than total visible
+      // area so the mask does not close when the
+      // visitor continues down past the CTA.
+
+      const referenceHeight = Math.min(
+        rect.height,
+        viewportHeight
+      );
+
+      if (referenceHeight <= 0) return;
+
+      const entryVisibility =
+        (viewportHeight - rect.top) /
+        referenceHeight;
+
+      const rawProgress =
+        (entryVisibility - CONFIG.radialStart) /
+        (CONFIG.radialEnd - CONFIG.radialStart);
+
+      const progress = Math.max(
+        0,
+        Math.min(1, rawProgress)
+      );
+
+      // At full reveal, remove the mask entirely.
+      if (progress >= 1) {
+        canvas.style.maskImage = "none";
+        canvas.style.webkitMaskImage = "none";
+        return;
+      }
+
+      const width = container.clientWidth;
+      const height = container.clientHeight;
+
+      if (width <= 0 || height <= 0) return;
+
+      // Distance from center to farthest corner.
+      const maximumRadius =
+        Math.hypot(width, height) / 2;
+
+      const initialRadius =
+        Math.min(width, height) *
+        CONFIG.radialInitialRadius;
+
+      // Expands beyond all four corners.
+      const radius =
+        initialRadius +
+        progress *
+        (maximumRadius * 1.3 - initialRadius);
+
+      const feather =
+        Math.max(1, radius * CONFIG.radialFeather);
+
+      const solidRadius = Math.max(
+        0,
+        radius - feather
+      );
+
+      const mask = [
+        "radial-gradient(",
+        "circle at 50% 50%,",
+        "black 0px,",
+        `black ${solidRadius}px,`,
+        `transparent ${radius}px`,
+        ")"
+      ].join(" ");
+
+      canvas.style.maskImage = mask;
+      canvas.style.webkitMaskImage = mask;
+    }
+
+    // --------------------------------------------------
     // Reset when leaving CTA
     // --------------------------------------------------
 
@@ -147,6 +234,7 @@
 
       canvas.style.display = "block";
       drawFrame(0);
+      updateRadialReveal();
 
       console.log("[CTA] Reset — first frame restored.");
     }
@@ -256,7 +344,7 @@
       .then(() => {
         ready = true;
 
-        // Display frame 5_00 before activation
+        // Display first frame before activation.
         currentFrame = 0;
         canvas.style.display = "block";
         drawFrame(0);
@@ -278,8 +366,8 @@
     window.addEventListener("resize", resize);
 
     // --------------------------------------------------
-    // Activate at 87% visibility
-    // Reset only after leaving section by another 20vh
+    // Activate at 98% visibility
+    // Reset only after leaving by another 20vh
     // --------------------------------------------------
 
     const RESET_OVERSHOOT = 0.2;
@@ -294,22 +382,29 @@
         Math.max(rect.top, 0)
       );
 
-      const visibilityRatio = visibleHeight / rect.height;
+      const visibilityRatio =
+        visibleHeight / rect.height;
 
-      // Start only when 87% of the CTA is visible
-      if (!active && visibilityRatio >= CONFIG.activationThreshold) {
+      updateRadialReveal();
+
+      // Start when 98% of the CTA is visible.
+      if (
+        !active &&
+        visibilityRatio >= CONFIG.activationThreshold
+      ) {
         active = true;
         start();
       }
 
-      // Reset only when the CTA is fully outside the viewport
-      // PLUS another 20% of viewport height
+      // Preserve original reset behavior.
       if (active) {
         const exitedAbove =
-          rect.bottom < -viewportHeight * RESET_OVERSHOOT;
+          rect.bottom <
+          -viewportHeight * RESET_OVERSHOOT;
 
         const exitedBelow =
-          rect.top > viewportHeight * (1 + RESET_OVERSHOOT);
+          rect.top >
+          viewportHeight * (1 + RESET_OVERSHOOT);
 
         if (exitedAbove || exitedBelow) {
           active = false;
@@ -318,24 +413,32 @@
       }
     }
 
-    window.addEventListener("scroll", checkCTAVisibility, {
-      passive: true
-    });
+    window.addEventListener(
+      "scroll",
+      checkCTAVisibility,
+      { passive: true }
+    );
 
-    window.addEventListener("resize", checkCTAVisibility);
+    window.addEventListener(
+      "resize",
+      checkCTAVisibility
+    );
 
     checkCTAVisibility();
   }
+
   // ==================================================
-  // CTA TEXT ANIMATION
+  // CTA TEXT ANIMATION — ORIGINAL BEHAVIOR
   // ==================================================
 
   function initCTAText() {
-    const section = document.querySelector('.section_cta');
-    const textLayer = document.querySelector('.cta_text_layer');
+    const section = document.querySelector(".section_cta");
+    const textLayer = document.querySelector(".cta_text_layer");
 
     if (!section || !textLayer || !window.gsap) {
-      console.warn('[CTA Text] Required elements or GSAP missing.');
+      console.warn(
+        "[CTA Text] Required elements or GSAP missing."
+      );
       return;
     }
 
@@ -344,7 +447,7 @@
       explosionFrame: 38,
       expandDuration: 1.1,
       settleDuration: 0.4,
-      resetOvershoot: 0.2,
+      resetOvershoot: 0.2
     };
 
     let entranceTimeline = null;
@@ -367,7 +470,7 @@
       gsap.set(textLayer, {
         scale: 0,
         opacity: 0,
-        transformOrigin: '50% 50%',
+        transformOrigin: "50% 50%"
       });
     }
 
@@ -380,11 +483,11 @@
         scale: 1,
         opacity: 1,
         duration: 1.2,
-        ease: 'power2.out',
+        ease: "power2.out"
       });
     }
 
-    section.addEventListener('cta:coin-start', () => {
+    section.addEventListener("cta:coin-start", () => {
       armed = true;
       resetText();
 
@@ -398,7 +501,8 @@
       if (!armed) return;
 
       const rect = section.getBoundingClientRect();
-      const extra = window.innerHeight * CONFIG.resetOvershoot;
+      const extra =
+        window.innerHeight * CONFIG.resetOvershoot;
 
       if (
         rect.bottom < -extra ||
@@ -409,23 +513,31 @@
       }
     }
 
-    window.addEventListener('scroll', checkReset, {
-      passive: true,
-    });
+    window.addEventListener(
+      "scroll",
+      checkReset,
+      { passive: true }
+    );
 
-    window.addEventListener('resize', checkReset);
+    window.addEventListener("resize", checkReset);
 
     resetText();
 
-    console.log('[CTA Text] Scale + bounce initialized.');
+    console.log(
+      "[CTA Text] Scale + bounce initialized."
+    );
   }
-    function initializeCTA() {
+
+  function initializeCTA() {
     initCTAText();
     init();
   }
 
   if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", initializeCTA);
+    document.addEventListener(
+      "DOMContentLoaded",
+      initializeCTA
+    );
   } else {
     initializeCTA();
   }
