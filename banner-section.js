@@ -2,8 +2,8 @@
 /*
  * POPClub V2 — Banner Section
  *
- * 1. Mouse-following background spotlight
- * 2. Scroll-driven products carousel
+ * Spotlight + scroll-driven product carousel
+ * Experimental first-pass holds on all cards.
  *
  * Banner CSS remains in Webflow Head.
  */
@@ -74,13 +74,16 @@
 (() => {
   function initBannerProducts() {
     if (!window.gsap || !window.ScrollTrigger) {
-      console.warn('[Banner Products] GSAP or ScrollTrigger missing.');
+      console.warn(
+        '[Banner Products] GSAP or ScrollTrigger missing.'
+      );
       return;
     }
 
     gsap.registerPlugin(ScrollTrigger);
 
     const section = document.querySelector('.section_banner');
+
     const viewport = section?.querySelector(
       '.products_viewport.banner_products'
     );
@@ -92,14 +95,16 @@
       : [];
 
     if (!section || !viewport || slides.length < 2) {
-      console.warn('[Banner Products] Missing banner, viewport, or slides.');
+      console.warn(
+        '[Banner Products] Missing banner, viewport, or slides.'
+      );
       return;
     }
 
     const lastIndex = slides.length - 1;
 
     // ==========================================
-    // ORIGINAL SCROLL SETTINGS — UNCHANGED
+    // ORIGINAL SCROLL SETTINGS
     // ==========================================
 
     const BANNER_HOLD = 0.75;
@@ -111,154 +116,224 @@
       slides.length * CARD_DURATION +
       END_HOLD;
 
-    // ==========================================
-    // VIDEO SWITCHING SETTINGS
-    // ==========================================
-
     const FORWARD_ACTIVATION = 0.95;
     const BACKWARD_ACTIVATION = 0.15;
 
     let activeIndex = -1;
-
-    // ==========================================
-    // FIRST-PASS EXPERIMENT — UPI CARD ONLY
-    // ==========================================
-
-    const FIRST_CARD_GATE = {
-      enabled: true,
-      maxWaitMs: 4500,
-      minimumHoldMs: 550,
-      gestureQuietMs: 220
-    };
-
-    let firstGateSeen = false;
-    let firstGateHolding = false;
-    let firstGateStarted = 0;
-    let firstGateLastWheel = 0;
-    let firstGateTimer = null;
     let bannerTrigger = null;
 
-    const firstCardEndUnits =
-      BANNER_HOLD + CARD_DURATION;
+    // ==========================================
+    // FIRST-PASS HOLD SETTINGS
+    // ==========================================
 
-    const firstCardEndProgress =
-      firstCardEndUnits / totalUnits;
+    const GATE = {
+      enabled: true,
 
-    function releaseFirstGate(reason) {
-      if (!firstGateHolding) return;
+      // Extra viewing time after video ends.
+      afterVideoMs: 700,
 
-      firstGateHolding = false;
-      firstGateSeen = true;
+      // Minimum time before manual skipping.
+      minimumSkipMs: 2000,
 
-      clearTimeout(firstGateTimer);
-      firstGateTimer = null;
+      // Quiet period distinguishing scroll attempts.
+      gestureQuietMs: 500,
+
+      // Safety release if video stalls.
+      maxWaitMs: 6000
+    };
+
+    // A gate is used only once per card.
+    const visited = new Set();
+
+    let holdingIndex = -1;
+    let holdStartedAt = 0;
+    let lastWheelAt = 0;
+    let holdTimer = null;
+    let releaseTimer = null;
+
+    function cardEndProgress(index) {
+      return (
+        BANNER_HOLD +
+        (index + 1) * CARD_DURATION
+      ) / totalUnits;
+    }
+
+    function cardEndY(index) {
+      if (!bannerTrigger) return null;
+
+      return bannerTrigger.start +
+        cardEndProgress(index) *
+        (bannerTrigger.end - bannerTrigger.start);
+    }
+
+    function clearGateTimers() {
+      clearTimeout(holdTimer);
+      clearTimeout(releaseTimer);
+
+      holdTimer = null;
+      releaseTimer = null;
+    }
+
+    function releaseGate(reason) {
+      if (holdingIndex < 0) return;
+
+      const releasedIndex = holdingIndex;
+
+      clearGateTimers();
+
+      holdingIndex = -1;
 
       console.info(
-        '[Banner Products] First-card hold released:',
+        '[Banner Products] Card',
+        releasedIndex + 1,
+        'hold released:',
         reason
       );
     }
 
-    function startFirstGate() {
+    function beginGate(index) {
       if (
-        !FIRST_CARD_GATE.enabled ||
-        firstGateSeen ||
-        firstGateHolding
+        !GATE.enabled ||
+        visited.has(index) ||
+        holdingIndex >= 0
       ) return;
 
-      firstGateHolding = true;
-      firstGateStarted = performance.now();
-      firstGateLastWheel = firstGateStarted;
+      visited.add(index);
 
-      firstGateTimer = setTimeout(
-        () => releaseFirstGate('failsafe timeout'),
-        FIRST_CARD_GATE.maxWaitMs
+      holdingIndex = index;
+      holdStartedAt = performance.now();
+      lastWheelAt = holdStartedAt;
+
+      holdTimer = setTimeout(
+        () => releaseGate('safety timeout'),
+        GATE.maxWaitMs
       );
 
       console.info(
-        '[Banner Products] First-card hold started.'
+        '[Banner Products] Holding card',
+        index + 1
       );
     }
 
-    function firstCardEndY() {
-      return bannerTrigger
-        ? bannerTrigger.start +
-            firstCardEndProgress *
-            (bannerTrigger.end - bannerTrigger.start)
-        : null;
+    function videoFinished(index) {
+      if (holdingIndex !== index) return;
+
+      clearTimeout(releaseTimer);
+
+      releaseTimer = setTimeout(
+        () => releaseGate('video completed'),
+        GATE.afterVideoMs
+      );
     }
+
+    // ==========================================
+    // FIRST-PASS WHEEL CONTROL
+    // ==========================================
 
     function onBannerWheel(event) {
       if (
-        !FIRST_CARD_GATE.enabled ||
-        firstGateSeen ||
+        !GATE.enabled ||
         !bannerTrigger ||
-        event.deltaY <= 0
+        event.deltaY <= 0 ||
+        event.ctrlKey ||
+        event.defaultPrevented
       ) return;
 
-      // Do not interfere with Ctrl+wheel browser zoom.
-      if (event.ctrlKey) return;
-
       const y = window.scrollY;
-      const endY = firstCardEndY();
 
-      if (endY === null) return;
-
-      // Only intervene inside the first card's range.
-      // Widget navigation is not intercepted.
-
-      const nearFirstCard =
-        y >= bannerTrigger.start &&
-        y <= endY + 2;
-
-      if (!nearFirstCard) return;
+      if (
+        y < bannerTrigger.start - 2 ||
+        y > bannerTrigger.end + 2
+      ) return;
 
       const now = performance.now();
 
-      if (firstGateHolding) {
+      // ----------------------------------------
+      // ACTIVE HOLD
+      // ----------------------------------------
+
+      if (holdingIndex >= 0) {
+        const boundary = cardEndY(holdingIndex);
+
+        if (boundary === null) return;
+
+        // A navigation-widget jump can bypass
+        // the gate without being pulled backward.
+        if (y > boundary + 4) {
+          releaseGate('navigation bypass');
+          return;
+        }
+
+        const elapsed = now - holdStartedAt;
+
         const freshGesture =
-          now - firstGateLastWheel >=
-          FIRST_CARD_GATE.gestureQuietMs;
+          now - lastWheelAt >=
+          GATE.gestureQuietMs;
 
-        const enoughTime =
-          now - firstGateStarted >=
-          FIRST_CARD_GATE.minimumHoldMs;
+        lastWheelAt = now;
 
-        firstGateLastWheel = now;
-
-        if (freshGesture && enoughTime) {
-          releaseFirstGate('new downward gesture');
+        if (
+          elapsed >= GATE.minimumSkipMs &&
+          freshGesture
+        ) {
+          releaseGate('deliberate scroll skip');
           return;
         }
 
         event.preventDefault();
+
         return;
       }
 
-      // Catch a fast wheel gesture that would
-      // otherwise skip the first card.
+      // ----------------------------------------
+      // FIND NEXT UNVISITED CARD
+      // ----------------------------------------
 
-      const deltaPixels =
-        event.deltaY *
-        (
-          event.deltaMode === 1
-            ? 16
-            : event.deltaMode === 2
-              ? window.innerHeight
-              : 1
-        );
+      let nextIndex = -1;
 
-      if (y + deltaPixels >= endY - 2) {
+      for (let i = 0; i <= lastIndex; i++) {
+        if (!visited.has(i)) {
+          nextIndex = i;
+          break;
+        }
+      }
+
+      if (nextIndex < 0) return;
+
+      const boundary = cardEndY(nextIndex);
+      if (boundary === null) return;
+
+      // Normalize wheel deltas.
+      const multiplier =
+        event.deltaMode === 1
+          ? 16
+          : event.deltaMode === 2
+            ? window.innerHeight
+            : 1;
+
+      const delta = event.deltaY * multiplier;
+
+      // If the scroll would reach or cross
+      // the next card's completed position,
+      // stop exactly at that card.
+      if (
+        y <= boundary + 2 &&
+        y + delta >= boundary - 2
+      ) {
         event.preventDefault();
 
-        startFirstGate();
-
         window.scrollTo({
-          top: endY,
+          top: boundary,
           behavior: 'instant'
         });
 
         ScrollTrigger.update();
+
+        beginGate(nextIndex);
+
+        // Ensure playback starts even when a
+        // large scroll lands at the boundary.
+        activateProduct(nextIndex);
       }
     }
 
@@ -435,12 +510,12 @@
         video.addEventListener('ended', () => {
           completed = true;
 
-          if (index === 0) {
-            releaseFirstGate('video ended');
-          }
-
           stopTracking();
           updateText();
+
+          // Release the first-pass hold
+          // after the additional viewing delay.
+          videoFinished(index);
         });
 
         video.addEventListener(
@@ -453,7 +528,10 @@
         );
       }
 
-      return { pause, play };
+      return {
+        pause,
+        play
+      };
     });
 
     // ==========================================
@@ -462,6 +540,7 @@
 
     function activateProduct(index) {
       if (index < 0 || index > lastIndex) return;
+
       if (activeIndex === index) return;
 
       if (activeIndex >= 0) {
@@ -469,6 +548,7 @@
       }
 
       activeIndex = index;
+
       products[index].play();
 
       console.log(
@@ -515,18 +595,17 @@
         if (forwardIndex >= 0) {
           activateProduct(forwardIndex);
         }
+
         return;
       }
 
       // Forward scrolling.
-
       if (forwardIndex > activeIndex) {
         activateProduct(forwardIndex);
         return;
       }
 
       // Backward scrolling.
-
       let backwardIndex = activeIndex;
 
       while (backwardIndex > 0) {
@@ -560,7 +639,9 @@
       zIndex: i => i + 1
     });
 
-    gsap.set(viewport, { opacity: 1 });
+    gsap.set(viewport, {
+      opacity: 1
+    });
 
     // ==========================================
     // SCROLL TIMELINE
@@ -584,12 +665,12 @@
 
         snap: {
           snapTo: progress => {
-            if (
-              firstGateHolding &&
-              progress <=
-                firstCardEndProgress + 0.01
-            ) {
-              return firstCardEndProgress;
+            // While holding, snap to the
+            // current card's finished position.
+            if (holdingIndex >= 0) {
+              return cardEndProgress(
+                holdingIndex
+              );
             }
 
             return snapPoints.reduce(
@@ -613,6 +694,20 @@
         onUpdate: self => {
           const units =
             self.progress * totalUnits;
+
+          // Programmatic navigation may
+          // jump beyond a held card.
+          if (holdingIndex >= 0) {
+            const boundary =
+              cardEndProgress(holdingIndex);
+
+            if (
+              self.progress >
+              boundary + 0.01
+            ) {
+              releaseGate('programmatic navigation');
+            }
+          }
 
           syncActiveProduct(units);
         }
@@ -640,10 +735,12 @@
       1
     ];
 
+    // Initial banner hold.
     timeline.to({}, {
       duration: BANNER_HOLD
     });
 
+    // Every card rises from below.
     slides.forEach(slide => {
       timeline.to(slide, {
         yPercent: 0,
@@ -651,6 +748,7 @@
       });
     });
 
+    // Final Pop Shop hold.
     timeline.to({}, {
       duration: END_HOLD
     });
@@ -676,13 +774,15 @@
 
         syncActiveProduct(units);
       },
-      { threshold: 0 }
+      {
+        threshold: 0
+      }
     );
 
     observer.observe(section);
 
     console.log(
-      '[Banner Products] Carousel ready — first-pass UPI test.'
+      '[Banner Products] Carousel ready — all-card first-pass hold test.'
     );
   }
 
