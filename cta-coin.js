@@ -15,7 +15,7 @@
 const CONFIG = {
 fps: 24,
 maxDPR: 2,
-activationThreshold: 0.87
+activationThreshold: 0.98
 };
 
 function init() {
