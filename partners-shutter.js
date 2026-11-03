@@ -10,8 +10,8 @@
     frameCount: 25,
 
     // Scroll-controlled visibility range.
-    startVisibility: 0.30,
-    endVisibility: 1.00
+    startVisibility: 0.20,
+    endVisibility: 0.98
   };
 
   function init() {
