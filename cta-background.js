@@ -4,7 +4,7 @@
  *
  * Independent of CTA coin and GLB scripts.
  *
- * Activation: CTA 87% visible
+ * Activation: CTA 98% visible
  * Explosion begins: 1.583 seconds after activation
  *
  * Scale:
@@ -25,7 +25,7 @@
   "use strict";
 
   const CONFIG = {
-    activationThreshold: 0.87,
+    activationThreshold: 0.98,
     resetOvershoot: 0.2,
 
     startDelay: 38 / 24,
