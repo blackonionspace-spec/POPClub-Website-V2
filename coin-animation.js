@@ -448,12 +448,6 @@ Promise.all([
   ...curtainPreloads
 ]).then(() => {
 
-  // Notify other scripts that all opening
-  // coin and curtain frames have loaded.
-  window.dispatchEvent(
-    new CustomEvent("popclub:coin-frames-ready")
-  );
-
   showCoinFrame(SPIN_START);
   showCurtainFrame(-1);
 
