@@ -442,12 +442,21 @@ coinSection.insertAdjacentElement("afterend", coinLayoutSpacer);
     // AUTOMATIC INTRO
     // =========================================
 
-    Promise.all([
-      ...coinPreloads,
-      ...curtainPreloads
-    ]).then(() => {
-      showCoinFrame(SPIN_START);
-      showCurtainFrame(-1);
+    
+Promise.all([
+  ...coinPreloads,
+  ...curtainPreloads
+]).then(() => {
+
+  // Notify other scripts that all opening
+  // coin and curtain frames have loaded.
+  window.dispatchEvent(
+    new CustomEvent("popclub:coin-frames-ready")
+  );
+
+  showCoinFrame(SPIN_START);
+  showCurtainFrame(-1);
+
 
       const frameState = {
         value: SPIN_START
