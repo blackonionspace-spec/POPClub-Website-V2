@@ -8,10 +8,10 @@
     background: ".partners_bg",
 
     frameCount: 25,
+    fps: 20,
 
-    // Scroll-controlled visibility range.
-    startVisibility: 0.20,
-    endVisibility: 0.98
+    startVisibility: 0.95,
+    resetOvershoot: 0.20
   };
 
   function init() {
@@ -21,19 +21,12 @@
     const urls = window.partnersShutterFrameURLs;
 
     if (!section || !layer || !background) {
-      console.warn(
-        "Partners shutter: Missing Webflow elements."
-      );
+      console.warn("Partners shutter: Missing Webflow elements.");
       return;
     }
 
-    if (
-      !Array.isArray(urls) ||
-      urls.length !== CONFIG.frameCount
-    ) {
-      console.warn(
-        "Partners shutter: Expected 25 frame URLs."
-      );
+    if (!Array.isArray(urls) || urls.length !== CONFIG.frameCount) {
+      console.warn("Partners shutter: Expected 25 frame URLs.");
       return;
     }
 
@@ -69,7 +62,7 @@
     layer.appendChild(image);
 
     // ==========================================
-    // PRELOAD ALL 25 FRAMES
+    // PRELOAD FRAMES
     // ==========================================
 
     const frames = urls.map((url) => {
@@ -78,7 +71,23 @@
       return frame;
     });
 
+    const framesReady = Promise.all(
+      frames.map((frame) => {
+        if (frame.complete) return Promise.resolve();
+
+        return new Promise((resolve) => {
+          frame.addEventListener("load", resolve, { once: true });
+          frame.addEventListener("error", resolve, { once: true });
+        });
+      })
+    );
+
     let frameIndex = -1;
+    let playing = false;
+    let completed = false;
+    let pending = false;
+    let animationId = null;
+    let playbackToken = 0;
 
     layer.style.visibility = "visible";
 
@@ -89,27 +98,30 @@
     function showFrame(index) {
       const nextIndex = Math.max(
         0,
-        Math.min(
-          Math.round(index),
-          urls.length - 1
-        )
+        Math.min(Math.round(index), urls.length - 1)
       );
 
-      // Avoid changing the image source
-      // unnecessarily on every scroll event.
       if (nextIndex === frameIndex) return;
 
       frameIndex = nextIndex;
-      image.src = urls[frameIndex];
+      image.src = urls[nextIndex];
     }
 
+    showFrame(0);
+
     // ==========================================
-    // SCROLL PROGRESS
+    // VISIBILITY CALCULATION
     // ==========================================
 
-    function getProgress() {
+    function getVisibility() {
       const rect = section.getBoundingClientRect();
       const viewportHeight = window.innerHeight;
+
+      const visibleHeight = Math.max(
+        0,
+        Math.min(rect.bottom, viewportHeight) -
+        Math.max(rect.top, 0)
+      );
 
       const referenceHeight = Math.min(
         rect.height,
@@ -118,51 +130,122 @@
 
       if (referenceHeight <= 0) return 0;
 
-      // The section's leading edge enters
-      // from the bottom of the viewport.
-      //
-      // Progress increases as the section
-      // becomes more visible on entry.
-      //
-      // It stays at 100% after the section
-      // has fully entered the viewport.
-
-      const entryVisibility =
-        (viewportHeight - rect.top) /
-        referenceHeight;
-
-      const rawProgress =
-        (
-          entryVisibility -
-          CONFIG.startVisibility
-        ) /
-        (
-          CONFIG.endVisibility -
-          CONFIG.startVisibility
-        );
-
-      return Math.max(
-        0,
-        Math.min(1, rawProgress)
-      );
+      return Math.min(1, visibleHeight / referenceHeight);
     }
 
     // ==========================================
-    // UPDATE FRAME FROM SCROLL
+    // RESET DETECTION — BOTH DIRECTIONS
+    // ==========================================
+
+    function hasExitedBeyondReset() {
+      const rect = section.getBoundingClientRect();
+      const viewportHeight = window.innerHeight;
+      const overshoot = viewportHeight * CONFIG.resetOvershoot;
+
+      // Section has passed above the viewport.
+      const exitedAbove = rect.bottom <= -overshoot;
+
+      // Section has passed below the viewport.
+      const exitedBelow = rect.top >= viewportHeight + overshoot;
+
+      return exitedAbove || exitedBelow;
+    }
+
+    // ==========================================
+    // RESET
+    // ==========================================
+
+    function reset() {
+      playbackToken++;
+
+      if (animationId !== null) {
+        cancelAnimationFrame(animationId);
+        animationId = null;
+      }
+
+      playing = false;
+      completed = false;
+      pending = false;
+
+      showFrame(0);
+    }
+
+    // ==========================================
+    // AUTOPLAY AT 20 FPS
+    // ==========================================
+
+    function play() {
+      if (playing || completed || pending) return;
+
+      pending = true;
+      const token = ++playbackToken;
+
+      framesReady.then(() => {
+        if (token !== playbackToken) return;
+
+        pending = false;
+
+        // Recheck visibility after loading.
+        if (getVisibility() < CONFIG.startVisibility) return;
+
+        playing = true;
+
+        const frameDuration = 1000 / CONFIG.fps;
+        const totalDuration = urls.length * frameDuration;
+        let startTime = null;
+
+        showFrame(0);
+
+        function animate(now) {
+          if (token !== playbackToken || !playing) return;
+
+          if (startTime === null) startTime = now;
+
+          const elapsed = now - startTime;
+
+          const nextFrame = Math.min(
+            Math.floor(elapsed / frameDuration),
+            urls.length - 1
+          );
+
+          showFrame(nextFrame);
+
+          if (elapsed >= totalDuration) {
+            playing = false;
+            completed = true;
+            animationId = null;
+            showFrame(urls.length - 1);
+            return;
+          }
+
+          animationId = requestAnimationFrame(animate);
+        }
+
+        animationId = requestAnimationFrame(animate);
+      });
+    }
+
+    // ==========================================
+    // VIEWPORT MONITORING
     // ==========================================
 
     function update() {
-      const progress = getProgress();
+      if (hasExitedBeyondReset()) {
+        if (playing || completed || pending || frameIndex !== 0) {
+          reset();
+        }
+        return;
+      }
 
-      const frame =
-        progress * (urls.length - 1);
-
-      showFrame(frame);
+      if (
+        !playing &&
+        !completed &&
+        !pending &&
+        getVisibility() >= CONFIG.startVisibility
+      ) {
+        play();
+      }
     }
-
-    // ==========================================
-    // REQUEST ANIMATION FRAME THROTTLING
-    // ==========================================
 
     let ticking = false;
 
@@ -177,34 +260,28 @@
       });
     }
 
-    window.addEventListener(
-      "scroll",
-      requestUpdate,
-      { passive: true }
-    );
+    window.addEventListener("scroll", requestUpdate, {
+      passive: true
+    });
 
-    window.addEventListener(
-      "resize",
-      requestUpdate
-    );
+    window.addEventListener("resize", requestUpdate);
 
     // ==========================================
     // ALIGNMENT PREVIEW
     // ==========================================
 
-    const params = new URLSearchParams(
-      window.location.search
-    );
+    const params = new URLSearchParams(window.location.search);
+    const previewMode = params.get("previewShutter") === "1";
 
-    if (params.get("previewShutter") === "1") {
-      // Show the final frame for alignment.
+    if (previewMode) {
+      completed = true;
       showFrame(urls.length - 1);
     } else {
       update();
     }
 
     // ==========================================
-    // DEBUG / MANUAL CONTROLS
+    // DEBUG CONTROLS
     // ==========================================
 
     window.partnersShutter = {
@@ -214,25 +291,19 @@
       urls,
 
       showFrame,
-      update,
-
-      getProgress,
-
-      reset() {
-        showFrame(0);
-      }
+      play,
+      reset,
+      getVisibility,
+      hasExitedBeyondReset
     };
 
     console.log(
-      "Partners shutter: Scroll-controlled sequence ready."
+      "Partners shutter: Autoplay 20 FPS, trigger 95%, reset 20vh."
     );
   }
 
   if (document.readyState === "loading") {
-    document.addEventListener(
-      "DOMContentLoaded",
-      init
-    );
+    document.addEventListener("DOMContentLoaded", init);
   } else {
     init();
   }
