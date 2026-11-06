@@ -8,7 +8,7 @@
     background: ".partners_bg",
 
     frameCount: 25,
-    fps: 20,
+    fps: 18,
 
     startVisibility: 0.95,
     resetOvershoot: 0.20
