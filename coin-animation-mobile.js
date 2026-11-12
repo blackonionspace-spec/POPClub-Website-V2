@@ -410,7 +410,7 @@
       start: "top top",
       end: `+=${CONFIG.scrollDistance}`,
       pin: true,
-      pinSpacing: false,
+      pinSpacing: true,
       anticipatePin: 1,
       invalidateOnRefresh: true,
 
