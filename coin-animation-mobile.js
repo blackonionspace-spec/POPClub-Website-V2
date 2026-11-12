@@ -411,7 +411,6 @@
       end: `+=${CONFIG.scrollDistance}`,
       pin: true,
       pinSpacing: true,
-      pinType: "transform",
       anticipatePin: 1,
       invalidateOnRefresh: true,
 
