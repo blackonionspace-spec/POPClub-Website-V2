@@ -405,6 +405,13 @@
 
     const coinSection = document.querySelector(".section_coin");
 
+    const coinLayoutSpacer = document.createElement("div");
+    coinLayoutSpacer.id = "coin-layout-experiment";
+    coinLayoutSpacer.style.cssText =
+      "height:153vh;pointer-events:none;";
+
+    coinSection.insertAdjacentElement("afterend", coinLayoutSpacer);
+
     const scrollTrigger = ScrollTrigger.create({
       trigger: coinSection,
       start: "top top",
