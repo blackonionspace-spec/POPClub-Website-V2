@@ -1,6 +1,7 @@
 
 /*
  * POPCLUB V2 — CRT GLOW
+ * Desktop + Mobile Image Selection
  *
  * Uses the existing Problem ScrollTrigger.
  * Does not create another pin.
@@ -14,10 +15,32 @@
 
   function initCRTGlow() {
     const section = document.querySelector('.section_problem');
-    const glow = document.querySelector('.crt_outer_glow');
 
-    if (!section || !glow || !window.gsap || !window.ScrollTrigger) {
+    const desktopGlow =
+      document.querySelector('.crt_outer_glow');
+
+    const mobileGlow =
+      document.querySelector('.crt_outer_glow_mobile');
+
+    if (!section || !window.gsap || !window.ScrollTrigger) {
       console.warn('[CRT Glow] Required elements unavailable.');
+      return;
+    }
+
+    const isMobile = window.popclubDevice
+      ? window.popclubDevice.isMobile
+      : window.matchMedia('(max-width: 767px)').matches;
+
+    const glow = isMobile ? mobileGlow : desktopGlow;
+    const inactiveGlow = isMobile ? desktopGlow : mobileGlow;
+
+    // Keep the inactive image completely hidden.
+    if (inactiveGlow) {
+      inactiveGlow.style.display = 'none';
+    }
+
+    if (!glow) {
+      console.warn('[CRT Glow] Selected glow image not found.');
       return;
     }
 
@@ -98,7 +121,10 @@
     gsap.ticker.add(update);
     update(0);
 
-    console.log('[CRT Glow] Initialized.');
+    console.log(
+      '[CRT Glow] Initialized:',
+      isMobile ? 'mobile' : 'desktop'
+    );
   }
 
   if (document.readyState === 'loading') {
