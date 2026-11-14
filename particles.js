@@ -9,10 +9,25 @@
  * timing, density and visibility behaviour.
  */
 
+
 (() => {
   'use strict';
 
   function init() {
+
+    // Disable all particle effects on mobile.
+    // No canvases, particles, or animation loops are created.
+    const isMobile = window.popclubDevice
+      ? window.popclubDevice.isMobile
+      : window.matchMedia('(max-width: 767px)').matches;
+
+    if (isMobile) {
+      console.info(
+        '[POPClub] Particle effects disabled on mobile.'
+      );
+      return;
+    }
+
 
     const CONFIG = {
       // ----------------------------------------
