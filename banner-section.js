@@ -13,10 +13,25 @@
 // BANNER SPOTLIGHT
 // ==========================================
 
+
 (() => {
   function initBannerSpotlight() {
+
+    // Disable the cursor spotlight on mobile.
+    const isMobile = window.popclubDevice
+      ? window.popclubDevice.isMobile
+      : window.matchMedia('(max-width: 767px)').matches;
+
+    if (isMobile) {
+      console.info(
+        '[Banner Spotlight] Disabled on mobile.'
+      );
+      return;
+    }
+
     const section = document.querySelector('.section_banner');
     if (!section) return;
+
 
     const spotlight = section.querySelector('.banner_bg_light');
     if (!spotlight) return;
