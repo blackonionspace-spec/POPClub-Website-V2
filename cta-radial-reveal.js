@@ -23,18 +23,35 @@
 (() => {
   "use strict";
 
-  const CONFIG = {
-    revealStart: 0.40,
-    revealEnd: 0.98,
+  
+const isMobile = window.matchMedia(
+  '(max-width: 767px)'
+).matches;
 
-    startRadiusVW: 5,
-    endRadiusVW: 55,
+const CONFIG = {
+  revealStart: 0.40,
+  revealEnd: 0.98,
 
-    featherVW: 6,
-    fadeDuration: 1,
+  startRadiusVW: 5,
 
-    resetOvershoot: 0.2
-  };
+  // Desktop keeps the original 55vw radius.
+  // Mobile uses a radius sufficient to reach
+  // the corners of a portrait viewport.
+  endRadiusVW: isMobile
+    ? (
+        Math.hypot(
+          window.innerWidth / 2,
+          window.innerHeight / 2
+        ) / window.innerWidth
+      ) * 100 + 6
+    : 55,
+
+  featherVW: 6,
+  fadeDuration: 1,
+
+  resetOvershoot: 0.2
+};
+
 
   function init() {
     const section = document.querySelector(".section_cta");
