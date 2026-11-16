@@ -16,7 +16,7 @@
   host.style.opacity = '0';
 
   const BASE =
-    'https://cdn.jsdelivr.net/gh/blackonionspace-spec/POPClub-Website-V2@18a86d5298fe95b24680480ab031b5891efff713/cta-3d/';
+  'https://cdn.jsdelivr.net/gh/blackonionspace-spec/POPClub-Website-V2@main/cta-3d/';
 
   const START_DELAY = 1.42;
   const FADE_DURATION = 0.5;
