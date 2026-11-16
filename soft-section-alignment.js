@@ -1,24 +1,7 @@
 
 (() => {
-  
-function initSoftSectionAlignment() {
-
-  // Temporary mobile test:
-  // Disable alignment until the new
-  // card-style snap controller is implemented.
-  const isTouchDevice = window.matchMedia(
-    '(hover: none) and (pointer: coarse)'
-  ).matches;
-
-  if (isTouchDevice) {
-    console.info(
-      '[Soft Align] Temporarily disabled on touch devices.'
-    );
-    return;
-  }
-
-  if (!window.gsap || !window.ScrollTrigger) {
-
+  function initSoftSectionAlignment() {
+    if (!window.gsap || !window.ScrollTrigger) {
       console.warn('[Soft Align] GSAP or ScrollTrigger missing.');
       return;
     }
@@ -44,6 +27,212 @@ function initSoftSectionAlignment() {
       console.warn('[Soft Align] No matching sections.');
       return;
     }
+
+    const isTouchDevice = window.matchMedia(
+      '(hover: none) and (pointer: coarse)'
+    ).matches;
+
+    // ==================================================
+    // MOBILE: CARD-STYLE SNAP ALIGNMENT
+    // ==================================================
+
+    if (isTouchDevice) {
+      const MOBILE = {
+        duration: 0.35,
+        threshold: 0.60,
+        idleDelay: 180,
+        alignedTolerance: 3,
+        rearmDistance: 0.75
+      };
+
+      let idleTimer = null;
+      let animation = null;
+      let touchActive = false;
+      let isAligning = false;
+
+      let lastSnappedSection = null;
+      let lastSnappedY = null;
+
+      function clearTimer() {
+        if (idleTimer !== null) {
+          clearTimeout(idleTimer);
+          idleTimer = null;
+        }
+      }
+
+      function cancelSnap() {
+        clearTimer();
+
+        if (animation) {
+          animation.kill();
+          animation = null;
+        }
+
+        isAligning = false;
+      }
+
+      function getTarget() {
+        const vh = window.innerHeight;
+        const maxDistance = vh * MOBILE.threshold;
+
+        let nearest = null;
+
+        for (const section of sections) {
+          const rect = section.getBoundingClientRect();
+
+          // Only target approximately full-screen sections.
+          if (Math.abs(rect.height - vh) > vh * 0.20) {
+            continue;
+          }
+
+          const distance = Math.abs(rect.top);
+
+          if (distance > maxDistance) continue;
+
+          if (
+            distance < MOBILE.alignedTolerance
+          ) {
+            continue;
+          }
+
+          if (
+            !nearest ||
+            distance < nearest.distance
+          ) {
+            nearest = {
+              section,
+              y: window.scrollY + rect.top,
+              distance
+            };
+          }
+        }
+
+        return nearest;
+      }
+
+      function snapIfNeeded() {
+        idleTimer = null;
+
+        if (touchActive || isAligning) return;
+
+        const target = getTarget();
+        if (!target) return;
+
+        const startY = window.scrollY;
+
+        // Prevent repeatedly pulling the user back
+        // after they've snapped to this section.
+        if (
+          target.section === lastSnappedSection &&
+          lastSnappedY !== null &&
+          Math.abs(startY - lastSnappedY) <
+            window.innerHeight * MOBILE.rearmDistance
+        ) {
+          return;
+        }
+
+        isAligning = true;
+
+        const state = { y: startY };
+
+        animation = gsap.to(state, {
+          y: target.y,
+          duration: MOBILE.duration,
+          ease: 'power2.out',
+          overwrite: true,
+
+          onUpdate() {
+            window.scrollTo(0, state.y);
+          },
+
+          onComplete() {
+            window.scrollTo(0, target.y);
+
+            lastSnappedSection = target.section;
+            lastSnappedY = target.y;
+
+            isAligning = false;
+            animation = null;
+          },
+
+          onInterrupt() {
+            isAligning = false;
+            animation = null;
+          }
+        });
+      }
+
+      function scheduleSnap() {
+        clearTimer();
+
+        if (touchActive || isAligning) return;
+
+        idleTimer = setTimeout(
+          snapIfNeeded,
+          MOBILE.idleDelay
+        );
+      }
+
+      function onTouchStart() {
+        touchActive = true;
+        cancelSnap();
+      }
+
+      function onTouchEnd(event) {
+        if (event.touches.length > 0) return;
+
+        touchActive = false;
+        scheduleSnap();
+      }
+
+      function onScroll() {
+        if (touchActive || isAligning) return;
+
+        // Momentum scrolling keeps postponing
+        // the snap until movement settles.
+        scheduleSnap();
+      }
+
+      window.addEventListener(
+        'touchstart',
+        onTouchStart,
+        { passive: true }
+      );
+
+      window.addEventListener(
+        'touchend',
+        onTouchEnd,
+        { passive: true }
+      );
+
+      window.addEventListener(
+        'touchcancel',
+        onTouchEnd,
+        { passive: true }
+      );
+
+      window.addEventListener(
+        'scroll',
+        onScroll,
+        { passive: true }
+      );
+
+      window.addEventListener('resize', () => {
+        cancelSnap();
+        lastSnappedSection = null;
+        lastSnappedY = null;
+      });
+
+      console.log(
+        '[Soft Align] Mobile CTA + Partners snap ready.'
+      );
+
+      return;
+    }
+
+    // ==================================================
+    // DESKTOP: ORIGINAL SOFT ALIGNMENT
+    // ==================================================
 
     let idleTimer = null;
     let animation = null;
@@ -133,8 +322,6 @@ function initSoftSectionAlignment() {
         return;
       }
 
-      // Avoid pulling the user back to a section
-      // they have only just moved away from.
       if (
         target.section === lastAlignedTarget &&
         lastAlignedY !== null &&
@@ -194,8 +381,6 @@ function initSoftSectionAlignment() {
       if (touchActive) return;
 
       if (lastInput === 'touch') {
-        // Every momentum scroll event extends the
-        // settling window.
         touchIdleUntil =
           performance.now() + CONFIG.touchIdleDelay;
 
@@ -215,8 +400,6 @@ function initSoftSectionAlignment() {
 
     function onTouchMove() {
       markTouchInput();
-
-      // Never align while a finger is dragging.
       clearIdleTimer();
     }
 
@@ -226,9 +409,6 @@ function initSoftSectionAlignment() {
       touchActive = false;
       markTouchInput();
 
-      // Allow native momentum scrolling to finish.
-      // Further scroll events will keep postponing
-      // this alignment.
       scheduleAlignment(CONFIG.touchIdleDelay);
     }
 
@@ -303,7 +483,7 @@ function initSoftSectionAlignment() {
     });
 
     console.log(
-      '[Soft Align] CTA and Partners touch-aware alignment ready.'
+      '[Soft Align] Desktop CTA + Partners alignment ready.'
     );
   }
 
