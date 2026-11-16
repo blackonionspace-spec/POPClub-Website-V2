@@ -18,7 +18,11 @@
     const section = document.querySelector(CONFIG.section);
     const layer = document.querySelector(CONFIG.layer);
     const background = document.querySelector(CONFIG.background);
-    const urls = window.partnersShutterFrameURLs;
+    const isMobileLayout = window.matchMedia('(max-width: 767px)').matches;
+
+const urls = isMobileLayout
+  ? window.partnersShutterMobileFrameURLs
+  : window.partnersShutterFrameURLs;
 
     if (!section || !layer || !background) {
       console.warn(
