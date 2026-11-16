@@ -38,8 +38,15 @@
     { kind: 'hold', from: 169, to: 169, d: 600 }
   ];
 
-  function init() {
-    if (document.getElementById(WIDGET_ID)) return;
+  
+function init() {
+  // Disable the scroll widget entirely on mobile.
+  if (window.matchMedia('(max-width: 767px)').matches) {
+    return;
+  }
+
+  if (document.getElementById(WIDGET_ID)) return;
+
 
     // ==========================================
     // 1. CSS
