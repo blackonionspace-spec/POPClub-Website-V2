@@ -112,20 +112,29 @@
   renderer.toneMappingExposure = 1.3;
   renderer.setClearColor(0x000000, 0);
 
-  renderer.domElement.style.cssText = [
-    'position:absolute',
-    'inset:0',
-    'width:100%',
-    'height:100%',
-    'display:block',
-    'pointer-events:auto',
-    'touch-action:none',
-    'visibility:hidden',
-    'cursor:default'
-  ].join(';');
+  
+const isTouchDevice = window.matchMedia(
+  '(hover: none) and (pointer: coarse)'
+).matches;
 
-  host.appendChild(renderer.domElement);
-  host.style.pointerEvents = 'auto';
+renderer.domElement.style.cssText = [
+  'position:absolute',
+  'inset:0',
+  'width:100%',
+  'height:100%',
+  'display:block',
+  `pointer-events:${isTouchDevice ? 'none' : 'auto'}`,
+  `touch-action:${isTouchDevice ? 'auto' : 'none'}`,
+  'visibility:hidden',
+  'cursor:default'
+].join(';');
+
+host.appendChild(renderer.domElement);
+
+host.style.pointerEvents = isTouchDevice
+  ? 'none'
+  : 'auto';
+
 
   // Approved 85mm camera
   const axis = new THREE.Quaternion().setFromAxisAngle(
