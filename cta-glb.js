@@ -149,10 +149,12 @@ host.style.pointerEvents = isTouchDevice
   );
 
   camera.position.set(
-    -0.004163948300020308,
-    11.566847194137651,
-    0.13761279552284753
-  );
+  -0.004163948300020308,
+  window.matchMedia('(max-width: 767px)').matches
+    ? 11.55
+    : 11.566847194137651,
+  0.13761279552284753
+);
 
   camera.quaternion.copy(axis);
 
@@ -768,9 +770,12 @@ console.log(
 
   // Load six GLBs and animation.json
   try {
-    const response = await fetch(
-      BASE + 'animation.json'
-    );
+    const isMobileLayout = window.matchMedia('(max-width: 767px)').matches;
+const animationFile = isMobileLayout
+  ? 'animation-mobile.json'
+  : 'animation.json';
+
+const response = await fetch(BASE + animationFile);
 
     if (!response.ok) {
       throw new Error(
