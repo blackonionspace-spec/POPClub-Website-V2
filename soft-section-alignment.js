@@ -1,7 +1,24 @@
 
 (() => {
-  function initSoftSectionAlignment() {
-    if (!window.gsap || !window.ScrollTrigger) {
+  
+function initSoftSectionAlignment() {
+
+  // Temporary mobile test:
+  // Disable alignment until the new
+  // card-style snap controller is implemented.
+  const isTouchDevice = window.matchMedia(
+    '(hover: none) and (pointer: coarse)'
+  ).matches;
+
+  if (isTouchDevice) {
+    console.info(
+      '[Soft Align] Temporarily disabled on touch devices.'
+    );
+    return;
+  }
+
+  if (!window.gsap || !window.ScrollTrigger) {
+
       console.warn('[Soft Align] GSAP or ScrollTrigger missing.');
       return;
     }
