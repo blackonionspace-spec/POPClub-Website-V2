@@ -403,8 +403,24 @@
     // VIDEO CONTROLLERS
     // ==========================================
 
-    const products = slides.map((slide, index) => {
-      const video = slide.querySelector('video');
+    
+const products = slides.map((slide, index) => {
+
+  // Select the correct background video for this device.
+  const isMobile = window.popclubDevice
+    ? window.popclubDevice.isMobile
+    : window.matchMedia('(max-width: 767px)').matches;
+
+  const videoWrapper = slide.querySelector(
+    isMobile
+      ? '.product_video_mobile'
+      : '.product_video'
+  );
+
+  const video = videoWrapper
+    ? videoWrapper.querySelector('video')
+    : null;
+
 
       const content = slide.querySelector(
         '.product_content'
