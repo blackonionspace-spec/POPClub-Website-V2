@@ -447,7 +447,14 @@ Promise.all([
   ...coinPreloads,
   ...curtainPreloads
 ]).then(() => {
+// Notify other sections that all essential
+  // coin and curtain preload requests have settled.
+  window.popclubCoinAssetsReady = true;
 
+  window.dispatchEvent(
+    new Event("popclub:coin-assets-ready")
+  );
+  
   showCoinFrame(SPIN_START);
   showCurtainFrame(-1);
 
