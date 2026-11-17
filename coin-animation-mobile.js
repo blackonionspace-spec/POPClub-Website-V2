@@ -36,7 +36,6 @@
   const CURTAIN_LAST_FRAME = 39;
 
   function initCoinAnimation() {
-    if (window.popclubDevice?.isDesktop === true) return;
     const wrapper = document.querySelector(".coin_wrapper");
     const coinContainer = document.querySelector(".coin_coin");
     const curtainContainer = document.querySelector(".coin_curtains");
