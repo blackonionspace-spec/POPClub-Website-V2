@@ -1,7 +1,36 @@
+/* POPClub V11 — CTA GLB lazy initialization */
 
-/* POPClub V2 — CTA GLB V10 two-pass compositing integration */
-(async () => {
+(() => {
   'use strict';
+
+  const ctaSection = document.querySelector('.section_cta');
+
+  if (!ctaSection) {
+    console.warn('[CTA GLB] CTA section not found');
+    return;
+  }
+
+  let initializationStarted = false;
+
+  const observer = new IntersectionObserver((entries) => {
+    if (initializationStarted) return;
+
+    if (entries.some(entry => entry.isIntersecting)) {
+      initializationStarted = true;
+      observer.disconnect();
+
+      initializeGLB().catch(error => {
+        console.error('[CTA GLB] Initialization failed:', error);
+      });
+    }
+  }, {
+    rootMargin: `${window.innerHeight}px 0px ${window.innerHeight}px 0px`,
+    threshold: 0
+  });
+
+  observer.observe(ctaSection);
+
+  async function initializeGLB() {
 
   const section = document.querySelector('.section_cta');
   const host = document.querySelector('.cta_glb_layer');
@@ -1068,7 +1097,10 @@ const response = await fetch(BASE + animationFile);
 
   requestAnimationFrame(animate);
 
-  console.log(
-    '[CTA GLB] V10 two-pass Webflow controller initialized'
+    console.log(
+    '[CTA GLB] V11 two-pass Webflow controller initialized'
   );
-})();
+
+  } // End initializeGLB
+
+})(); // End lazy initialization wrapper
