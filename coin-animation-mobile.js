@@ -374,6 +374,11 @@
       });
     }
 
+    // TEMPORARY LCP TEST — show heading immediately
+gsap.set(".coin_heading, .coin_logo, .coin_qr", {
+  opacity: 1,
+  visibility: "visible"
+});
     const coinPreloads = preloadFrames(
       coinUrls,
       coinImages,
@@ -591,26 +596,7 @@
         dropStartTime
       );
 
-      // =====================================
-      // PART 4 — HEADING FADE-IN
-      // =====================================
-
-      // Fade begins when the coin drops,
-      // at exactly 3 seconds into the intro.
-
-      timeline.fromTo(
-        ".coin_heading, .coin_logo, .coin_qr",
-        {
-          opacity: 0
-        },
-        {
-          opacity: 1,
-          duration: dropDuration,
-          ease: "power2.inOut"
-        },
-        dropStartTime
-      );
-
+  
       console.log(
         `Coin intro started: ${CONFIG.spinCount} spins at ${CONFIG.fps} FPS`
       );
