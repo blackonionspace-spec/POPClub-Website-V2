@@ -3,6 +3,11 @@
 (() => {
   'use strict';
 
+    // Disable all text effects on mobile (767px and below)
+  if (window.matchMedia('(max-width: 767px)').matches) {
+    return;
+  }
+  
   const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
   const finePointer = window.matchMedia('(hover: hover) and (pointer: fine)');
   const configs = [];
